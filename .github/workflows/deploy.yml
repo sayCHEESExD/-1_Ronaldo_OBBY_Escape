@@ -1,43 +1,42 @@
 # Deploy to Bloxity Hosting.
 #
-#   dev            -> Bloxity "dev" channel
-#   main / master  -> Bloxity "prod" channel
+#   push to dev   -> Bloxity "dev"  channel
+#   push to main  -> Bloxity "prod" channel
 #
 # Two halves, because the game is two things: a Colyseus server that runs as a
-# long-lived container, and a static Vite build. The server image goes to GHCR
-# and is rolled by the Legion control plane; the client is built and uploaded
-# to Bloxity Hosting as a zip.
+# long-lived container, and a static Vite build.
 #
-# The client build is deliberately NOT gated on the server deploy. A static
-# bundle that failed to upload leaves players on the previous one, which is a
-# far better outcome than a half-deployed pair.
+#   server          builds the Dockerfile, pushes it to GHCR tagged with the
+#                   commit SHA, and rolls it on Legion
+#   client          builds the Vite client with this channel's backend URL
+#                   baked in, checks it, and zips it (index.html at the root)
+#   publish-client  uploads that zip to Bloxity frontend hosting - only once
+#                   the server of the SAME commit is live
 #
-# PROVENANCE: this file is adapted from the working deployment in
-# sayCHEESExD/-1_speed_moonwalk_escape (cross-checked against
-# -1_speed_animal_escape and -1_speed_broom_escape, all three identical on the
-# two routes). Both routes were verified against the live API there, each with
-# a negative control:
+# The client BUILDS in parallel with the server image, but it is PUBLISHED only
+# after the server deploy succeeded. The Colyseus schema lives in shared/, so a
+# client published ahead of its server speaks a protocol that server does not
+# have yet; a failed server deploy must leave players on the previous PAIR.
 #
-#   POST legion.bloxity.io/v1/apps/{id}/deploy              -> 401 (exists)
-#   POST legion.bloxity.io/v1/apps/{id}/not-a-route         -> 404 (control)
-#   POST api.bloxity.io/v1/hosting/games/{id}/frontend      -> 401 (exists)
-#   POST api.bloxity.io/v1/hosting/games/{id}/client        -> 404 (control)
+# ENDPOINTS - both from https://hosting.bloxity.io/docs, and both checked
+# against the live API with an unauthenticated request plus a negative control
+# (the route exists iff it answers 401 while its made-up sibling answers 404):
 #
-# Nothing here is a guess. Only the game id, the image name, the four per
-# channel URLs and this project's own script names were adapted.
+#   POST https://legion.bloxity.io/v1/apps/{gameId}/deploy        -> 401
+#   POST https://legion.bloxity.io/v1/apps/{gameId}/not-a-route   -> 404
+#   POST https://api.bloxity.io/v1/hosting/games/{gameId}/frontend -> 401
+#   POST https://api.bloxity.io/v1/hosting/games/{gameId}/client   -> 404
+#
+# The only secret is LEGION_DEPLOY_TOKEN. It is read from `secrets`, handed to
+# curl through the environment and never echoed.
 name: Deploy to Bloxity
 
 on:
   push:
-    branches: [dev, main, master]
+    branches: [dev, main]
+  # A manual re-run of a branch. The channel still comes from the branch, so a
+  # dispatch on `dev` can never publish to prod.
   workflow_dispatch:
-    inputs:
-      channel:
-        description: Channel to deploy to
-        required: true
-        default: dev
-        type: choice
-        options: [dev, prod]
 
 concurrency:
   # One deploy per branch at a time. Two overlapping runs would race to publish
@@ -46,73 +45,89 @@ concurrency:
   group: bloxity-deploy-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
-  # The Bloxity HOSTING app this repository deploys to.
+  # The Bloxity Hosting game id (hosting.bloxity.io -> My Games).
   #
-  # This game carries three names on purpose, and they are keyed by different
-  # systems - do not collapse them:
-  #
-  #   "+1 Ronaldo Obby Escape"    human-facing game name
-  #   ronaldo-obby-escape         Bloxity hosting game id - this value
-  #   ronaldo-obby-escape         Bloxity game slug (bloxity.io/g/<slug>) -
-  #                               shared/src/config/bloxity.ts. The SDK is
-  #                               initialised with it and the SERVER verifies
-  #                               login tokens against it; any other value
-  #                               rejects every signed-in player as a guest.
-  #                               Spelled like the hosting id here, but it is
-  #                               a separate registration - keep both in step
-  #                               with what the portal actually has.
+  # Not necessarily the SDK slug. The slug the client initialises the SDK with,
+  # and the server verifies login tokens against, is BLOXITY_GAME_SLUG in
+  # shared/src/config/bloxity.ts - a separate registration that happens to be
+  # spelled the same for this game. The `client` job asserts it is in the
+  # bundle.
   BLOXITY_GAME_ID: ronaldo-obby-escape
 
-  # A repository named like "-1_Ronaldo_Obby_Escape" cannot be a Docker
-  # reference - one may neither begin with a dash nor contain uppercase - so
-  # the image is named explicitly rather than derived from the repo. The shape
-  # still matches what the docs expect: ghcr.io/<owner>/<game>-server.
+  # ghcr.io/<owner>/<game>-server, the shape the docs use. Named explicitly
+  # because a repository named like "-1_Ronaldo_Obby_Escape" is not a valid
+  # Docker reference (no leading dash, no uppercase). Legion pulls it
+  # anonymously, so the GHCR package must be PUBLIC.
   IMAGE_NAME: ghcr.io/saycheesexd/ronaldo-obby-escape-server
 
-  # The room's player cap, and the same number as MAX_CLIENTS in
-  # server/src/rooms/GorgeRoom.ts. Legion fills a pod to seatCap and then
-  # spawns the next one, so this MUST equal the Colyseus room's maxClients: a
-  # larger figure here would have the matchmaker send a sixteenth player to a
-  # room that refuses them.
+  # seatCap is the room's player cap and MUST equal the Colyseus room's
+  # maxClients (MAX_CLIENTS in server/src/rooms/GorgeRoom.ts): Legion fills a
+  # pod to seatCap and then spawns the next. maxReplicas is the pod ceiling, so
+  # capacity is 15 x 5 = 75 concurrent players per channel.
   SEAT_CAP: '15'
-  # The pod ceiling, so total capacity is 15 x 5 = 75 concurrent players.
   MAX_REPLICAS: '5'
 
-  # Two DIFFERENT hosts, and that is not a typo: the control plane that rolls
-  # container images is legion.bloxity.io, while the static-frontend upload
-  # lives on api.bloxity.io. Overridable as repository variables so a change on
-  # Bloxity's side stays a settings edit rather than a commit.
-  LEGION_API: ${{ vars.LEGION_API_BASE || 'https://legion.bloxity.io' }}
-  HOSTING_API: ${{ vars.HOSTING_API_BASE || 'https://api.bloxity.io' }}
+  # The two documented hosts. They are different on purpose: containers are
+  # rolled by the Legion control plane, static frontends are uploaded to the
+  # platform API.
+  LEGION_API: https://legion.bloxity.io
+  HOSTING_API: https://api.bloxity.io
 
 jobs:
-  # Which channel this run publishes to, decided once so both jobs agree.
+  # Which channel this run publishes to, decided once so every job agrees.
   channel:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     outputs:
       name: ${{ steps.pick.outputs.name }}
+      backend: ${{ steps.pick.outputs.backend }}
+      socket: ${{ steps.pick.outputs.socket }}
+      frontend: ${{ steps.pick.outputs.frontend }}
     steps:
       - id: pick
+        env:
+          BRANCH: ${{ github.ref_name }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            CHANNEL="${{ inputs.channel }}"
-          elif [ "${{ github.ref_name }}" = "dev" ]; then
-            CHANNEL="dev"
-          else
-            CHANNEL="prod"
-          fi
-          echo "name=$CHANNEL" >> "$GITHUB_OUTPUT"
-          echo "Deploying branch '${{ github.ref_name }}' to the '$CHANNEL' channel."
+          set -euo pipefail
+          case "$BRANCH" in
+            dev)
+              CHANNEL=dev
+              HOST="${BLOXITY_GAME_ID}.dev.host.bloxity.io"
+              PLAY="${BLOXITY_GAME_ID}.dev.play.bloxity.io" ;;
+            main)
+              CHANNEL=prod
+              HOST="${BLOXITY_GAME_ID}.host.bloxity.io"
+              PLAY="${BLOXITY_GAME_ID}.play.bloxity.io" ;;
+            *)
+              echo "::error::Only 'dev' (-> dev) and 'main' (-> prod) deploy; '$BRANCH' does not."
+              exit 1 ;;
+          esac
+          {
+            echo "name=$CHANNEL"
+            echo "backend=https://$HOST"
+            echo "socket=wss://$HOST"
+            echo "frontend=https://$PLAY"
+          } >> "$GITHUB_OUTPUT"
+          echo "Branch '$BRANCH' -> channel '$CHANNEL'"
+          echo "  backend  https://$HOST  (socket wss://$HOST)"
+          echo "  frontend https://$PLAY"
 
   # ------------------------------------------------------------------ server
   server:
     needs: channel
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       # Required to push to ghcr.io with the built-in GITHUB_TOKEN.
       packages: write
+    env:
+      CHANNEL: ${{ needs.channel.outputs.name }}
+      BACKEND_URL: ${{ needs.channel.outputs.backend }}
     steps:
       - uses: actions/checkout@v4
 
@@ -129,26 +144,24 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           # The repository root: the Dockerfile installs the whole npm
-          # workspace because the server imports @obby/shared.
+          # workspace because the server imports @obby/shared. `.dockerignore`
+          # narrows it to the three manifests, shared/ and server/.
           context: .
           file: ./Dockerfile
           push: true
-          # Two tags: an IMMUTABLE "<channel>-<sha>", which is what gets
-          # deployed, and a moving "<channel>" pointer for humans reading the
-          # package list. Deploying the moving one would mean a re-run could
-          # roll out whatever a later push had since overwritten.
+          # An IMMUTABLE "<channel>-<sha>" tag, which is what gets deployed,
+          # and a moving "<channel>" pointer for humans reading the package
+          # list. Deploying the moving one would let a re-run roll out
+          # whatever a later push had since overwritten.
           tags: |
             ${{ env.IMAGE_NAME }}:${{ needs.channel.outputs.name }}-${{ github.sha }}
             ${{ env.IMAGE_NAME }}:${{ needs.channel.outputs.name }}
-          # A layer cache in the registry, so an unchanged lockfile does not
-          # re-run "npm ci" on every push.
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Roll the server on Legion
         env:
           TOKEN: ${{ secrets.LEGION_DEPLOY_TOKEN }}
-          CHANNEL: ${{ needs.channel.outputs.name }}
         run: |
           set -euo pipefail
           if [ -z "${TOKEN:-}" ]; then
@@ -159,16 +172,16 @@ jobs:
           IMAGE="${IMAGE_NAME}:${CHANNEL}-${GITHUB_SHA}"
           URL="${LEGION_API}/v1/apps/${BLOXITY_GAME_ID}/deploy"
 
-          # seatCap and maxReplicas are numbers, not strings - hence --argjson.
-          # No port is sent: Legion injects PORT and the server reads it.
-          # `version` is the commit SHA, which is what makes a deployment
-          # immutable and traceable back to a single push.
+          # The documented body. seatCap and maxReplicas are numbers - hence
+          # --argjson. No port is sent: Legion injects PORT and the server
+          # reads it. `version` is the commit SHA, which makes the deployment
+          # immutable and traceable to one push, and matches the frontend's.
           PAYLOAD=$(jq -n \
             --arg channel "$CHANNEL" \
             --arg image "$IMAGE" \
-            --arg version "${GITHUB_SHA}" \
-            --argjson seatCap "${SEAT_CAP}" \
-            --argjson maxReplicas "${MAX_REPLICAS}" \
+            --arg version "$GITHUB_SHA" \
+            --argjson seatCap "$SEAT_CAP" \
+            --argjson maxReplicas "$MAX_REPLICAS" \
             '{channel: $channel, image: $image, version: $version, seatCap: $seatCap, maxReplicas: $maxReplicas}')
 
           echo "POST $URL"
@@ -185,73 +198,77 @@ jobs:
           echo
 
           case "$HTTP" in
-            2*) echo "Server rolled on '$CHANNEL' with seatCap ${SEAT_CAP}, maxReplicas ${MAX_REPLICAS}." ;;
+            2*) echo "Server $GITHUB_SHA rolled on '$CHANNEL' (seatCap $SEAT_CAP, maxReplicas $MAX_REPLICAS)." ;;
             401|403)
-              echo "::error::Legion rejected the token. Re-copy LEGION_DEPLOY_TOKEN from My Games on hosting.bloxity.io (the eye icon)."
+              echo "::error::Legion rejected the token. Re-copy LEGION_DEPLOY_TOKEN from My Games on hosting.bloxity.io."
               exit 1 ;;
             404)
-              echo "::error::No such app on Legion - check that the game id '${BLOXITY_GAME_ID}' matches the one created on hosting.bloxity.io."
+              echo "::error::No such app on Legion - check that '${BLOXITY_GAME_ID}' matches the game id on hosting.bloxity.io."
               exit 1 ;;
-            *)  echo "::error::Server deploy failed with HTTP $HTTP."; exit 1 ;;
+            *)
+              echo "::error::Server deploy failed with HTTP $HTTP. If Legion reports it cannot pull the image, make the GHCR package public."
+              exit 1 ;;
           esac
 
-          if [ "$CHANNEL" = "dev" ]; then
-            echo "Backend: https://${BLOXITY_GAME_ID}.dev.host.bloxity.io"
-          else
-            echo "Backend: https://${BLOXITY_GAME_ID}.host.bloxity.io"
-          fi
+      # Informational only. Legion rolls pods asynchronously and an idle dev
+      # channel scales to zero, so a slow first answer is not a failed deploy -
+      # this reports what the endpoint says rather than gating on it. /health
+      # is the server's existing probe, unchanged.
+      - name: Report backend health
+        continue-on-error: true
+        run: |
+          for attempt in $(seq 1 12); do
+            BODY=$(curl -sS --max-time 10 "${BACKEND_URL}/health" || true)
+            echo "attempt $attempt: $BODY"
+            case "$BODY" in *'"status":"ok"'*) echo "Backend healthy at ${BACKEND_URL}/health"; exit 0 ;; esac
+            sleep 10
+          done
+          echo "::warning::${BACKEND_URL}/health did not answer ok within two minutes. The pod may still be starting; check the Legion dashboard."
 
   # ------------------------------------------------------------------ client
   client:
     needs: channel
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 20
+    env:
+      CHANNEL: ${{ needs.channel.outputs.name }}
+      # Baked in at build time - Vite has no later step in which to inject it.
+      # Without it the client derives a URL from the page's own host, which on
+      # *.play.bloxity.io is not the backend.
+      VITE_SERVER_URL: ${{ needs.channel.outputs.socket }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          # Matches the engines field and the Netlify build.
+          # Satisfies the root engines field (>=20.11).
           node-version: '20'
           cache: npm
 
       - run: npm ci
 
-      # The repo's own gates, run before anything is published rather than
-      # after: a build that typechecks but ships a modified player asset is a
-      # broken character, and finding that out from players is too late.
-      #
-      # This project has `typecheck` and `verify:assets`; there is no bare
-      # `verify` or `size:client` script, so the size gate is the explicit
-      # check in "Check the build against the 12 MB budget" below.
-      - name: Typecheck and verify
+      # The repo's own gates, before anything is built for publishing.
+      - name: Typecheck and verify assets
         run: |
           set -euo pipefail
           npm run typecheck
           npm run verify:assets
 
       - name: Build the client
-        env:
-          # Baked in at build time - Vite has no later step in which to inject
-          # it, so a change here means a rebuild.
-          #
-          # The Colyseus endpoint for this channel. Per-channel because dev and
-          # prod are separate backends. Note which is which: the `dev.` host is
-          # the DEV backend and the bare host is PROD. Getting this backwards
-          # points dev players at the production server, which is invisible
-          # until somebody notices their test progress on the live leaderboard.
-          VITE_SERVER_URL: ${{ needs.channel.outputs.name == 'prod' && (vars.SERVER_URL_PROD || 'wss://ronaldo-obby-escape.host.bloxity.io') || (vars.SERVER_URL_DEV || 'wss://ronaldo-obby-escape.dev.host.bloxity.io') }}
         run: |
           set -euo pipefail
-          echo "channel=${{ needs.channel.outputs.name }}"
-          echo "VITE_SERVER_URL=$VITE_SERVER_URL"
+          echo "channel=$CHANNEL  VITE_SERVER_URL=$VITE_SERVER_URL"
           npm run build:client
 
-          # The SDK gameSlug is compiled into the bundle from
-          # shared/src/config/bloxity.ts and is NOT the hosting game id.
-          # Asserted here because the two are easy to confuse and a wrong slug
-          # silently breaks login, friends and Bux while the game still runs.
+          # The backend URL is the one thing a wrong channel would get wrong
+          # silently: a dev build pointed at prod plays fine and writes test
+          # progress onto the live leaderboard.
+          grep -rqF "$VITE_SERVER_URL" client/dist/assets \
+            || { echo "::error::$VITE_SERVER_URL is not baked into the bundle."; exit 1; }
+          echo "Backend URL confirmed in the bundle."
+
+          # The SDK slug (shared/src/config/bloxity.ts), compiled in. A wrong
+          # slug silently breaks login, friends and Bux while the game runs.
           grep -rqF 'ronaldo-obby-escape' client/dist/assets \
             || { echo "::error::SDK gameSlug ronaldo-obby-escape is missing from the bundle."; exit 1; }
           echo "SDK gameSlug confirmed in the bundle."
@@ -262,8 +279,6 @@ jobs:
           BYTES=$(du -sb client/dist | cut -f1)
           MB=$(awk -v b="$BYTES" 'BEGIN{printf "%.2f", b/1048576}')
           echo "client/dist = ${MB} MB"
-          # The project's hard constraint. A browser build over this is a
-          # download players on a phone will abandon.
           if [ "$BYTES" -gt 12582912 ]; then
             echo "::error::client/dist is ${MB} MB, over the 12 MB budget."
             exit 1
@@ -272,17 +287,13 @@ jobs:
       - name: Package the client
         run: |
           set -euo pipefail
-          test -f client/dist/index.html || { echo "::error::client/dist/index.html is missing - the build produced nothing."; exit 1; }
-          # A ZIP, because that is what the hosting upload accepts. Zipped from
-          # INSIDE client/dist so index.html sits at the archive ROOT rather
-          # than under a "dist" directory the host would serve as a subpath.
+          test -f client/dist/index.html || { echo "::error::client/dist/index.html is missing."; exit 1; }
+          # Zipped from INSIDE client/dist so index.html sits at the archive
+          # ROOT, not under a dist/ directory the host would serve as a subpath.
           (cd client/dist && zip -qr "${GITHUB_WORKSPACE}/client-dist.zip" .)
           ls -la client-dist.zip
-          echo "--- archive root ---"
           unzip -l client-dist.zip
-          # Fail loudly if index.html is not at the root: a zip that unpacks a
-          # directory serves a blank page and nothing else would catch it.
-          unzip -l client-dist.zip | awk '{print $4}' | grep -qx 'index.html' \
+          unzip -Z1 client-dist.zip | grep -qx 'index.html' \
             || { echo "::error::index.html is not at the archive root."; exit 1; }
 
       - name: Keep the bundle on the run
@@ -290,23 +301,38 @@ jobs:
         with:
           name: client-${{ needs.channel.outputs.name }}-${{ github.sha }}
           path: client-dist.zip
+          if-no-files-found: error
           retention-days: 14
+
+  # ---------------------------------------------------------- publish client
+  publish-client:
+    # Only once the server of this same commit is live - see the header.
+    needs: [channel, server, client]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CHANNEL: ${{ needs.channel.outputs.name }}
+      FRONTEND_URL: ${{ needs.channel.outputs.frontend }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: client-${{ needs.channel.outputs.name }}-${{ github.sha }}
 
       - name: Upload the client to Bloxity Hosting
         env:
           TOKEN: ${{ secrets.LEGION_DEPLOY_TOKEN }}
-          CHANNEL: ${{ needs.channel.outputs.name }}
         run: |
           set -euo pipefail
           if [ -z "${TOKEN:-}" ]; then
             echo "::error::LEGION_DEPLOY_TOKEN is not set. Add it under Settings -> Secrets and variables -> Actions."
             exit 1
           fi
+          unzip -Z1 client-dist.zip | grep -qx 'index.html' \
+            || { echo "::error::index.html is not at the archive root."; exit 1; }
 
-          # "version" is what the dashboard compares against the deployed
-          # backend to tell you whether the two halves match. The commit sha is
-          # used for both, so a frontend and a backend from the same push carry
-          # the same version string.
+          # The documented route. `version` is required - the dashboard uses it
+          # to show whether the frontend matches the deployed backend, and the
+          # commit SHA is what the server deploy sent too.
           URL="${HOSTING_API}/v1/hosting/games/${BLOXITY_GAME_ID}/frontend?channel=${CHANNEL}&version=${GITHUB_SHA}"
           echo "POST $URL"
 
@@ -322,18 +348,14 @@ jobs:
           echo
 
           case "$HTTP" in
-            2*) echo "Client published to the '$CHANNEL' channel." ;;
+            2*) echo "Client $GITHUB_SHA published to '$CHANNEL': $FRONTEND_URL" ;;
             401|403)
-              echo "::error::Bloxity rejected the token. Re-copy LEGION_DEPLOY_TOKEN from My Games on hosting.bloxity.io (the eye icon)."
+              echo "::error::Bloxity rejected the token. Re-copy LEGION_DEPLOY_TOKEN from My Games on hosting.bloxity.io."
               exit 1 ;;
             404)
-              echo "::error::No such game on Bloxity Hosting - check that '${BLOXITY_GAME_ID}' matches the id created on hosting.bloxity.io."
+              echo "::error::No such game on Bloxity Hosting - check that '${BLOXITY_GAME_ID}' matches the game id on hosting.bloxity.io."
               exit 1 ;;
-            *)  echo "::error::Client upload failed with HTTP $HTTP. The bundle is attached to this run as an artifact."; exit 1 ;;
+            *)
+              echo "::error::Client upload failed with HTTP $HTTP. The bundle is attached to this run as an artifact."
+              exit 1 ;;
           esac
-
-          if [ "$CHANNEL" = "dev" ]; then
-            echo "Frontend: https://${BLOXITY_GAME_ID}.dev.play.bloxity.io"
-          else
-            echo "Frontend: https://${BLOXITY_GAME_ID}.play.bloxity.io"
-          fi

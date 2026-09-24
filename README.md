@@ -104,31 +104,47 @@ settings and Bux. Two things need configuring outside the code:
 ### Deploying to Bloxity Hosting
 
 `.github/workflows/deploy.yml` deploys both halves of one commit, and the
-branch picks the channel:
+branch picks the channel (any other branch is refused):
 
-| Branch | Channel | Backend |
-| ------ | ------- | ------- |
-| `dev`  | `dev`   | `wss://ronaldo-obby-escape.dev.host.bloxity.io` |
-| `main` | `prod`  | `wss://ronaldo-obby-escape.host.bloxity.io` |
+| Branch | Channel | Frontend | Backend (HTTP + WSS) |
+| ------ | ------- | -------- | -------------------- |
+| `dev`  | `dev`   | <https://ronaldo-obby-escape.dev.play.bloxity.io> | `wss://ronaldo-obby-escape.dev.host.bloxity.io` |
+| `main` | `prod`  | <https://ronaldo-obby-escape.play.bloxity.io> | `wss://ronaldo-obby-escape.host.bloxity.io` |
 
-The server is built by the root `Dockerfile`, pushed to GHCR tagged with the
-commit SHA, and deployed to the channel; the client is then built with that
-channel's `VITE_SERVER_URL`, zipped with `index.html` at the archive root and
-uploaded. The SERVER GOES FIRST on purpose - the Colyseus schema is shared, so
-a client that ships ahead of its server speaks a protocol the server does not
-have yet.
+Game id `ronaldo-obby-escape`. What a run does:
 
-Required once, in **Settings > Secrets and variables > Actions**:
+1. **server** - builds the root `Dockerfile`, pushes
+   `ghcr.io/saycheesexd/ronaldo-obby-escape-server:<channel>-<sha>`, and rolls
+   it with `POST https://legion.bloxity.io/v1/apps/ronaldo-obby-escape/deploy`
+   (`channel`, `image`, `version` = commit SHA, `seatCap` 15 = the room's
+   `maxClients`, `maxReplicas` 5). It then reports `/health`, informationally.
+2. **client** - in parallel: typecheck, `verify:assets`, build with the
+   channel's `VITE_SERVER_URL`, assert that URL and the SDK slug are in the
+   bundle, check the 12 MB budget, and zip `client/dist` with `index.html` at
+   the archive root (kept on the run as an artifact).
+3. **publish-client** - only after the server deploy SUCCEEDED, uploads the raw
+   zip to `POST https://api.bloxity.io/v1/hosting/games/ronaldo-obby-escape/frontend?channel=<channel>&version=<sha>`.
+   The server goes first on purpose - the Colyseus schema is shared, so a
+   client that ships ahead of its server speaks a protocol the server does not
+   have yet.
 
-- **`LEGION_DEPLOY_TOKEN`** (secret). Never committed; the workflow reads it
-  from `secrets` and passes it to `curl` through the environment so it cannot
-  appear in a rendered command line.
+Both routes are the ones documented at <https://hosting.bloxity.io/docs>.
 
-Still to fill in: the two `BLOXITY_*_URL` values at the top of the workflow.
-They are blank because Bloxity's hosting API is documented behind the developer
-login at <https://dev.bloxity.io/hosting/docs> and is not public - a guessed
-route would POST a build somewhere that may not exist. The `preflight` job
-fails with instructions until both are set.
+Required once:
+
+- **`LEGION_DEPLOY_TOKEN`** - repository secret (**Settings > Secrets and
+  variables > Actions**), copied from My Games on hosting.bloxity.io. Never
+  committed; the workflow passes it to `curl` through the environment.
+- **The GHCR package must be public** (Legion pulls it anonymously):
+  GitHub profile > Packages > `ronaldo-obby-escape-server` > Package settings >
+  Change visibility > Public.
+- **Actions may write packages**: Settings > Actions > General > Workflow
+  permissions > "Read and write permissions" (or leave read-only; the job asks
+  for `packages: write` itself, which is enough unless an organisation policy
+  forbids it).
+
+The server listens on the `PORT` Bloxity injects (default 2567) and answers
+`GET /health`, which is also the image's `HEALTHCHECK`.
 
 **Saved progress on Bloxity lives in Bloxity's managed MongoDB.** Bloxity
 Hosting injects `MONGODB_URI` into every pod, and whenever it is set the server

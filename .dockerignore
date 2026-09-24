@@ -47,6 +47,13 @@ server/dist
 **/*.tsbuildinfo
 **/*.log
 
+# --- never ship local secrets ---------------------------------------------
+# `!shared` and `!server` re-include whole directories, so an untracked
+# `server/.env` from local development would otherwise ride along in a locally
+# built image. (CI checks out tracked files only, but a laptop build does not.)
+**/.env
+**/.env.*
+
 # --- never ship the runtime save file -------------------------------------
 # server/data holds real player profiles. It is gitignored, and baking a copy
 # into an image would ship one player's progression to everybody who pulls it.
