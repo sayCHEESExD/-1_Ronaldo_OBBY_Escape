@@ -9,7 +9,7 @@
  * Usage: node scripts/verify-assets.mjs
  */
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, relative } from 'node:path';
 
@@ -62,6 +62,25 @@ const strayCopy = join(repoRoot, 'client', 'public', 'player', 'player.fbx');
 if (existsSync(strayCopy)) {
   fail(`duplicate asset copy found at ${relative(repoRoot, strayCopy)} - delete it`);
 }
+
+// Every file in assets/ is served by name from the site root, so every name
+// must survive a URL untouched. Bloxity's frontend host answers 400 Bad
+// Request for a path containing `%20`: a file named with a space deploys and
+// then silently never loads - which is how the music, the Win cheer and the
+// death sound all went missing on DEV and PROD at once.
+const URL_SAFE = /^[A-Za-z0-9._-]+$/;
+const walk = (dir) => {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const abs = join(dir, entry.name);
+    const rel = relative(repoRoot, abs).split('\\').join('/');
+    if (!URL_SAFE.test(entry.name)) {
+      fail(`${rel} - rename it using only letters, digits, ".", "_" and "-" (no spaces)`);
+    }
+    if (entry.isDirectory()) walk(abs);
+  }
+};
+walk(join(repoRoot, 'assets'));
+if (failures === 0) pass('every file under assets/ has a URL-safe name');
 
 console.log(failures === 0 ? '\nassets OK' : `\n${failures} problem(s) found`);
 process.exit(failures === 0 ? 0 : 1);

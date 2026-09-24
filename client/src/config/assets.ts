@@ -17,19 +17,20 @@ export const ASSET_PATHS = {
   playerModel: '/player/player.fbx',
   playerTexture: '/player/green.png',
   /**
-   * The background music track (assets/audio/football music.mp3), looped.
+   * The background music track (assets/audio/football-music.mp3), looped.
    *
-   * File names with spaces are written percent-encoded, which is exactly the
-   * request a browser makes for them anyway - spelled out so no host has to
-   * guess.
+   * Every served file name is URL-safe - letters, digits, `.`, `_` and `-`
+   * only. Bloxity's frontend host answers 400 for a request containing `%20`,
+   * so a file named with a space deploys fine and then never loads.
+   * `npm run verify:assets` refuses such a name before it can ship.
    */
-  backgroundMusic: '/audio/football%20music.mp3',
+  backgroundMusic: '/audio/football-music.mp3',
   /** Recorded effects (assets/audio/), played by audio/Samples.ts. */
   jumpSound: '/audio/jump.mp3',
-  deathSound: '/audio/enemy%20death.mp3',
+  deathSound: '/audio/enemy-death.mp3',
   walkSound: '/audio/walk.mp3',
   /** Wins banked: a stadium crowd cheering. */
-  winSound: '/audio/crowd%20cheer.mp3',
+  winSound: '/audio/crowd-cheer.mp3',
   /** A backflip, heard as Ronaldo's own "SIUUU". */
   siuuSound: '/audio/sui.mp3',
 } as const;
