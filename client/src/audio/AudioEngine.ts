@@ -133,13 +133,14 @@ export class AudioEngine {
   }
 
   /**
-   * A backflip just STARTED - one call per flip.
+   * A backflip just STARTED - one call per flip. It is heard as the "SIUUU"
+   * of the celebration it plays as.
    *
    * The caller is expected to have counted actual flips rather than button
    * presses, so a flip the simulation refused never reaches here.
    */
   backflip(chainIndex = 0): void {
-    this.sfx?.backflip(chainIndex);
+    this.samples?.siuu(chainIndex);
   }
 
   /**
@@ -163,9 +164,9 @@ export class AudioEngine {
     this.samples?.setWalking(walking);
   }
 
-  /** Wins were awarded by the server. One call per award. */
+  /** Wins were awarded by the server - the crowd cheers. One call per award. */
   win(): void {
-    this.sfx?.win();
+    this.samples?.win();
   }
 
   dispose(): void {

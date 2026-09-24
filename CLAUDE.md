@@ -187,11 +187,18 @@ engine. Do not add a framework or a build tool without a concrete need.
   to the terminals, the body mesh to the real joints. `PlayerRig` binds the
   **first** bone of each name (traversal visits a parent before its child), which
   drives both meshes. Binding the terminals animates the arms only.
-- Background music is `assets/audio/background.mp3` (`ASSET_PATHS.
+- Background music is `assets/audio/football music.mp3` (`ASSET_PATHS.
   backgroundMusic`), looped by `MusicTrack`. It is STREAMED through an
   `<audio>` element routed into the Web Audio graph - never decoded into an
   AudioBuffer, which would hold tens of MB of PCM for the session - so master
   volume, mute and the portal's music slider all apply to it.
+- Recorded one-shots (`Samples`, decoded once): `jump.mp3`, `enemy death.mp3`
+  (death), `crowd cheer.mp3` (Wins banked) and `sui.mp3` (every backflip -
+  the "SIUUU" of the celebration, pitched up a semitone per flip in a chain,
+  capped at four). The cheer and "sui" are MONOPHONIC: a new play fades the
+  sounding copy out instead of layering, because both run seconds long
+  against events that can arrive several a second. File names with spaces
+  are written percent-encoded in `ASSET_PATHS`.
 - Assets are served straight from the repo `assets/` folder via Vite's
   `publicDir`. Do not copy assets into `client/`.
 

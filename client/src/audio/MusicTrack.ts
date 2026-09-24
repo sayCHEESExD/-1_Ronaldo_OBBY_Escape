@@ -11,7 +11,7 @@ const SCOPE = 'MusicTrack';
 const BASE_LEVEL = 0.35;
 
 /**
- * The background music: `assets/audio/background.mp3`, looped.
+ * The background music: `assets/audio/football music.mp3`, looped.
  *
  * STREAMED through an `<audio>` element rather than decoded into an
  * AudioBuffer - a decoded track of this length is tens of megabytes of PCM

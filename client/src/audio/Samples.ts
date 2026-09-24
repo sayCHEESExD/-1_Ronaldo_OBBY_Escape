@@ -4,19 +4,32 @@ import { logger } from '../util/logger.js';
 const SCOPE = 'Samples';
 
 /** The recorded effects in `assets/audio/`. */
-type SampleName = 'jump' | 'death' | 'walk';
+type SampleName = 'jump' | 'death' | 'walk' | 'win' | 'siuu';
+
+/** The one-shots - everything except the footstep loop. */
+type OneShot = Exclude<SampleName, 'walk'>;
 
 const SAMPLE_PATHS: Readonly<Record<SampleName, string>> = {
   jump: ASSET_PATHS.jumpSound,
   death: ASSET_PATHS.deathSound,
   walk: ASSET_PATHS.walkSound,
+  win: ASSET_PATHS.winSound,
+  siuu: ASSET_PATHS.siuuSound,
 };
 
-/** Mix level of each sample against the synthesised effects. */
+/**
+ * Mix level of each sample against the synthesised effects.
+ *
+ * Set by ear against each file's own loudness: the crowd cheer peaks at full
+ * scale while "sui" is recorded at under half of it, so the cheer is brought
+ * down and the voice left at full level to sit together in the mix.
+ */
 const LEVEL: Readonly<Record<SampleName, number>> = {
   jump: 0.7,
-  death: 0.8,
+  death: 0.85,
   walk: 0.45,
+  win: 0.55,
+  siuu: 1,
 };
 
 /**
@@ -25,17 +38,48 @@ const LEVEL: Readonly<Record<SampleName, number>> = {
  * The callers already fire on one-shot EDGES; this only stops two edges a
  * frame apart stacking into one doubled, louder copy.
  */
-const ONE_SHOT_COOLDOWN: Readonly<Record<'jump' | 'death', number>> = {
+const ONE_SHOT_COOLDOWN: Readonly<Record<OneShot, number>> = {
   jump: 0.08,
   death: 0.5,
+  win: 0.3,
+  siuu: 0.05,
 };
+
+/**
+ * One-shots that only ever sound ONE copy at a time: a new play fades the
+ * previous one out rather than layering over it.
+ *
+ * Both are long - the cheer 4.4s, "sui" 2.2s - against events that can come
+ * much faster: a chain of flips lands several a second, and Wins can bank
+ * back to back. Layered, a chain would be a wall of overlapping voices; as
+ * one voice it reads "si-si-SIUUU", each flip cutting in on the last.
+ */
+const MONOPHONIC: ReadonlySet<OneShot> = new Set(['win', 'siuu']);
+
+/** How fast a cut-off copy of a monophonic sample fades, in seconds. */
+const CUT_FADE = 0.06;
 
 /** Fade on starting and stopping the footstep loop, so it never clicks. */
 const WALK_FADE_IN = 0.04;
 const WALK_FADE_OUT = 0.06;
 
 /**
- * The recorded sound effects: jump, death and the footstep loop.
+ * Semitones each flip in a chain raises the "SIUUU" by, and the ceiling on
+ * that. A chain is the skill expression, so it should sound like one climbing;
+ * capped low, because pitching a voice far moves it from excited to cartoon.
+ */
+const SIUU_CHAIN_STEP = 1;
+const SIUU_CHAIN_MAX = 4;
+
+/** A one-shot copy that is still sounding. */
+interface Voice {
+  readonly source: AudioBufferSourceNode;
+  readonly gain: GainNode;
+}
+
+/**
+ * The recorded sound effects: jump, death, the Win cheer, the "SIUUU" and
+ * the footstep loop.
  *
  * Built by `AudioEngine` inside the gesture that starts audio, on the same
  * context and into the same master gain as the synthesised effects - so the
@@ -51,6 +95,8 @@ export class Samples {
   private readonly bus: GainNode;
   private readonly buffers = new Map<SampleName, AudioBuffer>();
   private readonly lastPlayedAt = new Map<SampleName, number>();
+  /** The sounding copy of each monophonic one-shot. */
+  private readonly voices = new Map<OneShot, Voice>();
 
   /** The ONE footstep loop, while it plays. Never more than one. */
   private walkSource: AudioBufferSourceNode | null = null;
@@ -74,6 +120,22 @@ export class Samples {
     this.playOnce('death');
   }
 
+  /** Wins were banked: the crowd goes up. */
+  win(): void {
+    this.playOnce('win');
+  }
+
+  /**
+   * A backflip started: "SIUUU".
+   *
+   * @param chainIndex 0 for the first flip of an airborne window, rising after
+   *                   - each one is pitched a little higher, so a chain climbs.
+   */
+  siuu(chainIndex = 0): void {
+    const steps = Math.min(Math.max(chainIndex, 0) * SIUU_CHAIN_STEP, SIUU_CHAIN_MAX);
+    this.playOnce('siuu', 2 ** (steps / 12));
+  }
+
   /**
    * Whether footsteps should be sounding right now.
    *
@@ -89,10 +151,12 @@ export class Samples {
   dispose(): void {
     this.disposed = true;
     this.stopWalk();
+    for (const voice of this.voices.values()) this.fadeOut(voice);
+    this.voices.clear();
     this.bus.disconnect();
   }
 
-  private playOnce(name: 'jump' | 'death'): void {
+  private playOnce(name: OneShot, rate = 1): void {
     const buffer = this.buffers.get(name);
     if (!buffer) return;
     const time = this.ctx.currentTime;
@@ -100,13 +164,39 @@ export class Samples {
     if (last !== undefined && time - last < ONE_SHOT_COOLDOWN[name]) return;
     this.lastPlayedAt.set(name, time);
 
+    const mono = MONOPHONIC.has(name);
+    if (mono) {
+      const previous = this.voices.get(name);
+      if (previous) this.fadeOut(previous);
+    }
+
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
+    source.playbackRate.value = rate;
     const gain = this.ctx.createGain();
     gain.gain.value = LEVEL[name];
     source.connect(gain).connect(this.bus);
-    source.onended = () => gain.disconnect();
+    const voice: Voice = { source, gain };
+    source.onended = () => {
+      gain.disconnect();
+      if (this.voices.get(name) === voice) this.voices.delete(name);
+    };
     source.start(time);
+    if (mono) this.voices.set(name, voice);
+  }
+
+  /** Fade a sounding copy out quickly and stop it, without a click. */
+  private fadeOut(voice: Voice): void {
+    const time = this.ctx.currentTime;
+    const level = voice.gain.gain;
+    level.cancelScheduledValues(time);
+    level.setValueAtTime(level.value, time);
+    level.linearRampToValueAtTime(0, time + CUT_FADE);
+    try {
+      voice.source.stop(time + CUT_FADE + 0.01);
+    } catch {
+      // Already stopped - nothing left to fade.
+    }
   }
 
   private startWalk(): void {
