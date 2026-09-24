@@ -1,0 +1,33 @@
+# Netlify build for the Vite client.
+#
+# The base stays at the REPOSITORY ROOT on purpose: this is an npm workspaces
+# monorepo, and the client imports @obby/shared. Building from inside client/
+# would install only that workspace and the shared package would be missing.
+[build]
+  base = "."
+  command = "npm run build:client"
+  publish = "client/dist"
+
+[build.environment]
+  # Matches the root package.json engines field.
+  NODE_VERSION = "20"
+
+# Single-page app: every path serves the one document. Assets are matched
+# first, so this only ever catches routes, never a missing file.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# The FBX is served from the repo-level assets/ folder via Vite's publicDir.
+# Without an explicit type Netlify serves it as text/plain, which some
+# browsers refuse to hand to the loader.
+[[headers]]
+  for = "/player/*.fbx"
+  [headers.values]
+    Content-Type = "application/octet-stream"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

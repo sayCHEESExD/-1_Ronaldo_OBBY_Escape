@@ -1,0 +1,54 @@
+# Docker build context for the server image.
+#
+# THE ONE TRAP THIS FILE EXISTS TO AVOID: excluding a workspace manifest. The
+# Dockerfile runs `npm ci` against the root lockfile, and npm resolves the
+# WHOLE workspace tree in one pass - so a missing `client/package.json` fails
+# the install outright, even though nothing in the server image imports the
+# client. All three of `shared/`, `server/` and `client/package.json` must
+# reach the context.
+#
+# ALLOWLIST: `*` drops everything and each `!` adds one thing back, so the
+# context is what the server needs and cannot silently grow. The re-includes
+# are TOP-LEVEL names, then pruned from the inside - re-including a nested
+# path under a directory `*` already excluded depends on how the daemon prunes
+# excluded directories, which is not worth relying on for a manifest the build
+# cannot proceed without.
+
+*
+
+# --- install inputs -------------------------------------------------------
+!package.json
+!package-lock.json
+!.npmrc
+
+# --- the two workspaces the image compiles --------------------------------
+!shared
+!server
+
+# --- the client, for its manifest ALONE -----------------------------------
+# Needed so `npm ci` can resolve the workspace tree. Its sources are not:
+# the Vite bundle is built by the deploy workflow and uploaded to Bloxity
+# frontend hosting, never served from this container.
+!client
+client/src
+client/dist
+client/index.html
+client/vite.config.ts
+client/tsconfig.json
+
+# --- re-exclude build litter inside the paths added back above ------------
+# A stale local `dist` would otherwise be copied over the freshly compiled
+# output, and `node_modules` would defeat `npm ci` and could carry binaries
+# built for the wrong OS.
+node_modules
+**/node_modules
+shared/dist
+server/dist
+**/*.tsbuildinfo
+**/*.log
+
+# --- never ship the runtime save file -------------------------------------
+# server/data holds real player profiles. It is gitignored, and baking a copy
+# into an image would ship one player's progression to everybody who pulls it.
+data
+server/data

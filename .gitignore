@@ -1,0 +1,15 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.local
+.DS_Store
+*.log
+.vite/
+
+# Persisted player profiles (runtime save file, never repository content).
+# Two paths because serverConfig.dataDir is resolved against the working
+# directory: `npm start` runs in the server workspace, a bare
+# `node server/dist/index.js` runs at the repo root.
+server/data/
+/data/

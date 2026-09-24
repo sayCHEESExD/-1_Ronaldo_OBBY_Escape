@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <title>+1 Backflip Obby Escape</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        /*
+         * The HUD's scale: every HUD metric is a design pixel times this.
+         * ui/uiScale.ts recomputes it from the live viewport on every resize
+         * and rotation; 1.3 is only the design value the page starts with
+         * before the script runs.
+         */
+        --obby-ui-scale: 1.3;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        /*
+         * Dynamic viewport units: on iOS and Android the browser's own toolbar
+         * shrinks and grows as you scroll, and a percentage height is measured
+         * against the LARGE viewport - so the bottom of the game (the HUD, and
+         * now the touch controls) sat under the toolbar until you scrolled.
+         * The 100% above stays as the fallback for anything older.
+         */
+        height: 100dvh;
+        overflow: hidden;
+        /* No pinch-zoom, no double-tap zoom, no rubber-banding over the game. */
+        touch-action: none;
+        background: #0b1020;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        /* Mobile: stop the browser from hijacking drags/pinches over the canvas. */
+        overscroll-behavior: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      /*
+       * The cursor exists for menus and shops, and nowhere else.
+       *
+       * Pointer lock hides it while it holds, but the browser hands it back on
+       * every Escape and will not grant it again until the player's next
+       * gesture - so between those two moments a pointer would sit over the
+       * HUD with nothing to click. This class covers that window.
+       *
+       * The descendant selector is deliberate: the rail buttons declare a
+       * `cursor: pointer` of their own, which would otherwise show through.
+       */
+      body.obby-cursor-hidden,
+      body.obby-cursor-hidden * {
+        cursor: none !important;
+      }
+      #app {
+        position: fixed;
+        inset: 0;
+        /*
+         * Fixed to the viewport rather than flowed, so a mobile browser
+         * resizing its chrome moves the canvas instead of scrolling the page.
+         */
+        touch-action: none;
+      }
+      #app canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+      }
+      #boot {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-content: center;
+        gap: 8px;
+        padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+          env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+        text-align: center;
+        color: #cbd5f5;
+        background: #0b1020;
+        font-size: 13px;
+        transition: opacity 240ms ease;
+      }
+      #boot[hidden] {
+        display: none;
+      }
+      /*
+       * Offline: the panel stops covering the game and becomes a corner card,
+       * so the session is still playable but never silently pretends to be
+       * connected. Everything it gates - Wins, levels, shops - is server-owned.
+       */
+      #boot.notice {
+        inset: auto calc(env(safe-area-inset-right, 0px) + 12px)
+          calc(env(safe-area-inset-bottom, 0px) + 12px) auto;
+        place-content: start;
+        padding: 12px 14px;
+        max-width: 40ch;
+        border: 1px solid #7f1d1d;
+        border-radius: 8px;
+        background: rgba(12, 16, 24, 0.92);
+        pointer-events: none;
+      }
+      #boot.notice h1 {
+        margin-bottom: 6px;
+      }
+      #boot h1 {
+        font-size: 15px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #7dd3fc;
+      }
+      #boot .err {
+        color: #fca5a5;
+        max-width: 60ch;
+        white-space: pre-wrap;
+        text-align: left;
+      }
+    </style>
+    <!--
+      Bloxity SDK.
+
+      Loaded before the game bundle and NOT as a module, so `window.Legion`
+      exists by the time the first module runs and `bloxity.init()` never has
+      to wait or poll. It comes from a third-party CDN, so it can fail to
+      load - `BloxitySdk` treats that as a normal state and the game stays
+      playable without it.
+    -->
+    <script src="https://sdk.bloxity.io/legion-sdk.min.js"></script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="boot">
+      <h1>+1 Backflip Obby Escape</h1>
+      <p id="boot-status">Loading&hellip;</p>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
