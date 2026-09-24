@@ -24,7 +24,7 @@ const ACCOUNTS = {
   'tok-dave': 'dave',
   'tok-erin': 'erin',
 };
-const EXPECTED_SLUG = process.env.STUB_EXPECT_SLUG ?? 'anime-backflip-escape';
+const EXPECTED_SLUG = process.env.STUB_EXPECT_SLUG ?? 'ronaldo-obby-escape';
 
 const realFetch = globalThis.fetch;
 

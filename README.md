@@ -1,7 +1,24 @@
-# +1 Backflip Obby Escape
+# +1 Ronaldo Obby Escape
 
 A production browser multiplayer obby game. Three.js + TypeScript on the client,
 Colyseus + Node.js on the server, in an npm-workspaces monorepo.
+
+It is +1 Backflip Obby Escape reskinned as a football / Cristiano Ronaldo
+game, with every system kept exactly as it was:
+
+- **Win Shop -> Ronaldo characters.** Nine full-body Ronaldos stand on the
+  shop pedestals, one per era of his career. Walk onto one holding enough Wins
+  and you BECOME him - body, head, hair and kit - replacing your avatar. Same
+  nine tiers, prices and Speed per step as the boots they replace.
+- **Backflip -> Siuuu.** Every backflip plays as Ronaldo's celebration - a
+  leaping spin into the SIU stance - with the flip's lift, forward push and
+  chaining unchanged.
+- **Japan -> football.** The shrine gorge is now a stadium: a giant goal over
+  the gorge mouth, a grandstand, floodlights, LED hoardings, flags and bunting,
+  with the islands named after his career.
+
+The Ronaldos, the stadium and every sign are drawn procedurally at runtime -
+no image files - so the build stays inside the 12 MB budget.
 
 "Roblox-inspired" describes the **visual and gameplay style only** — this is not
 a Roblox Studio project and uses no game engine. See [CLAUDE.md](CLAUDE.md) for
@@ -91,8 +108,8 @@ branch picks the channel:
 
 | Branch | Channel | Backend |
 | ------ | ------- | ------- |
-| `dev`  | `dev`   | `wss://speed-backflip-escape.dev.host.bloxity.io` |
-| `main` | `prod`  | `wss://speed-backflip-escape.host.bloxity.io` |
+| `dev`  | `dev`   | `wss://ronaldo-obby-escape.dev.host.bloxity.io` |
+| `main` | `prod`  | `wss://ronaldo-obby-escape.host.bloxity.io` |
 
 The server is built by the root `Dockerfile`, pushed to GHCR tagged with the
 commit SHA, and deployed to the channel; the client is then built with that
@@ -140,16 +157,17 @@ that browser's guest progress onto it, if the account has none yet; an account
 that already has progress is never overwritten by a browser's.
 
 The token is checked against the game's bloxity.io slug,
-**`anime-backflip-escape`** (`shared/src/config/bloxity.ts`) - NOT the hosting
-id `speed-backflip-escape`. A token is a capability for one game; verifying it
-against any other slug rejects every signed-in player, which is how progress
-stayed per-browser while the code said `1-backflip-obby-escape`.
+**`ronaldo-obby-escape`** (`shared/src/config/bloxity.ts`) - a separate
+registration from the hosting id (`BLOXITY_GAME_ID` in the deploy workflow),
+even though both are spelled `ronaldo-obby-escape` here. A token is a
+capability for one game; verifying it against any other slug rejects every
+signed-in player and progress silently stays per-browser.
 
 **Bux purchases** are recorded durably by the webhook (keyed by transaction id,
 so a retried webhook pays once across pods and restarts), addressed to the
 Bloxity account that paid, and handed over when that account is verified in a
 room. The four SKUs (`wins_pouch`, `wins_sack`, `wins_chest`, `wins_vault`)
-must exist in Bloxity's catalogue under `anime-backflip-escape`.
+must exist in Bloxity's catalogue under `ronaldo-obby-escape`.
 
 `npm run verify:persistence` checks all of this against the built server with
 real clients (only Bloxity's verify URL is stubbed); see the header of

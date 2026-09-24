@@ -31,7 +31,7 @@ const TELEPORT_DISTANCE = 12;
  * Seconds on the ground after which a still-turning flip is treated as stuck.
  *
  * The animator ABORTS a rotation on the landed edge and eases upright over
- * `BACKFLIP_ANIM.abortDuration` (0.14s), so this has to outlast that. It is a
+ * `SIUUU_ANIM.abortDuration` (0.14s), so this has to outlast that. It is a
  * last resort for the case where no landed edge was ever observed - a patch
  * gap that skipped the airborne window, or a client that arrived mid-flip.
  */

@@ -12,11 +12,18 @@
 
 /** Identical geometry shared by every trophy platform. */
 export const PLATFORM = {
-  /** Extent along X. Islands are deliberately WIDE across the gorge. */
-  width: 22,
   /**
-   * Extent along Z: exactly half the width, so each island reads as a broad
-   * rectangular slab the player crosses quickly.
+   * Extent along X. Islands are deliberately WIDE across the gorge.
+   *
+   * 25, up from 22: a little more room either side of the landing line. Still
+   * inside the channel the player is clamped to (|x| <= 13), and it widens
+   * across the gorge only - every gap, the island length and the collection
+   * strip's position are exactly as they were.
+   */
+  width: 25,
+  /**
+   * Extent along Z, so each island reads as a broad rectangular slab the
+   * player crosses quickly.
    *
    * The floor on this number is hazard spacing, not looks. A walk-speed jump
    * covers 6.5 units, and a player may not launch within ~0.9 of a line, so an
@@ -439,8 +446,11 @@ export const BOOT_SHOP = {
   spacingZ: 5,
   /** How close the player must get to a pedestal to buy its boot. */
   pickupRadius: 2.4,
-  /** Height of the "Win Shop" sign above the platform. */
-  signY: 9,
+  /**
+   * Height of the "Win Shop" sign above the platform. Presentation only: it
+   * sits above the Ronaldo figures and their labels rather than behind them.
+   */
+  signY: 10.5,
 } as const;
 
 export const BANK_WALL = {

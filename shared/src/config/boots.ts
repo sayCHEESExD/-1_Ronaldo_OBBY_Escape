@@ -1,8 +1,17 @@
 /**
- * Boots: the Speed-per-step upgrade ladder, bought with trophy Wins.
+ * The Speed-per-step upgrade ladder, bought with trophy Wins.
  *
- * A boot REPLACES the base Speed granted per step, so equipping a better boot
- * multiplies how fast a player farms. Tier 1 is the starter boot and matches
+ * In +1 Ronaldo Obby Escape every tier is a Cristiano Ronaldo CHARACTER - one
+ * era of his career - and owning the best tier turns the player INTO that
+ * Ronaldo. The identifiers (`BootTier`, `bootSlot`, `ownedBoots`, `buyBoot`)
+ * are kept from the game this was reskinned from on purpose: they are
+ * replicated, persisted and validated, and renaming them would be a network
+ * and save-format change for no gameplay reason. What each slot LOOKS like
+ * lives in the client (`client/src/config/ronaldoKits.ts`); this file stays
+ * the economy.
+ *
+ * A tier REPLACES the base Speed granted per step, so equipping a better one
+ * multiplies how fast a player farms. Tier 1 is the starter Ronaldo and matches
  * `SPEED.perStep`, so an unequipped player and a tier-1 player farm alike.
  *
  * Buying is a DELIBERATE ACT: a boot is only acquired when the player walks
@@ -20,35 +29,39 @@
 export interface BootTier {
   /** 1-based slot, matching the shop pedestals left to right. */
   readonly slot: number;
+  /** The Ronaldo this tier turns the player into. */
   readonly name: string;
-  /** Speed granted per step while this boot is equipped. */
+  /** Speed granted per step while this tier is equipped. */
   readonly speedPerStep: number;
   /** Trophy Wins needed to unlock. Tier 1 is free. */
   readonly winsRequired: number;
-  /** Display colour for the shop model and the boots on the player's feet. */
+  /** Accent colour for the tier's pedestal glow and label. */
   readonly color: number;
 }
 
 /**
- * Seven tiers. The +8 and +15 costs are fixed by design; the rest ramp roughly
- * geometrically up to them so each boot arrives a run or two after the last.
+ * Nine tiers, his career in order and then beyond it. Every number here is
+ * unchanged from the boot ladder this replaced - only the names and accent
+ * colours are new. The +8 and +15 costs are fixed by design; the rest ramp
+ * roughly geometrically up to them so each Ronaldo arrives a run or two after
+ * the last.
  */
 export const BOOT_TIERS: readonly BootTier[] = [
-  { slot: 1, name: 'Starter Boots', speedPerStep: 1, winsRequired: 0, color: 0xf5c542 },
-  { slot: 2, name: 'Runner Boots', speedPerStep: 2, winsRequired: 10, color: 0x4f7ad6 },
-  { slot: 3, name: 'Bubble Boots', speedPerStep: 3, winsRequired: 35, color: 0xff6fb5 },
-  { slot: 4, name: 'Frost Boots', speedPerStep: 4, winsRequired: 100, color: 0x38bdf8 },
-  { slot: 5, name: 'Magma Boots', speedPerStep: 6, winsRequired: 250, color: 0xe23b3b },
-  { slot: 6, name: 'Storm Boots', speedPerStep: 8, winsRequired: 500, color: 0x3ecf6a },
-  { slot: 7, name: 'Mythic Boots', speedPerStep: 15, winsRequired: 1500, color: 0xa855f7 },
-  // --- Late game. Boots multiply progression PER STEP, which is the axis a
-  // --- deep player actually wants, so these are the most useful sink of the
-  // --- three. Only two are added: every tier is a physical pedestal along the
-  // --- Win Shop wall, and at the existing spacing a ninth already sits at
-  // --- z +22 against the platform's +28 front edge. More would need the shop
-  // --- re-laid out, which is a world change rather than an economy one.
-  { slot: 8, name: 'Celestial Boots', speedPerStep: 26, winsRequired: 250000, color: 0x5ce1ff },
-  { slot: 9, name: 'Ascendant Boots', speedPerStep: 45, winsRequired: 4000000, color: 0xfff0b8 },
+  { slot: 1, name: 'Rookie Ronaldo', speedPerStep: 1, winsRequired: 0, color: 0x1f9d55 },
+  { slot: 2, name: 'Red Devil Ronaldo', speedPerStep: 2, winsRequired: 10, color: 0xda291c },
+  { slot: 3, name: 'Galactico Ronaldo', speedPerStep: 3, winsRequired: 35, color: 0xf4f6fb },
+  { slot: 4, name: 'Bianconero Ronaldo', speedPerStep: 4, winsRequired: 100, color: 0x2a2a2a },
+  { slot: 5, name: 'Desert King Ronaldo', speedPerStep: 6, winsRequired: 250, color: 0xffd400 },
+  { slot: 6, name: 'Captain Ronaldo', speedPerStep: 8, winsRequired: 500, color: 0xc8102e },
+  { slot: 7, name: 'Golden Ronaldo', speedPerStep: 15, winsRequired: 1500, color: 0xf2c14e },
+  // --- Late game. These tiers multiply progression PER STEP, which is the
+  // --- axis a deep player actually wants, so they are the most useful sink of
+  // --- the three shops. Only two are added: every tier is a physical pedestal
+  // --- along the Win Shop wall, and at the existing spacing a ninth already
+  // --- sits at z +22 against the platform's +28 front edge. More would need
+  // --- the shop re-laid out, which is a world change rather than an economy one.
+  { slot: 8, name: 'Galaxy Ronaldo', speedPerStep: 26, winsRequired: 250000, color: 0x5ce1ff },
+  { slot: 9, name: 'GOAT Ronaldo', speedPerStep: 45, winsRequired: 4000000, color: 0xfff0b8 },
 ];
 
 /**

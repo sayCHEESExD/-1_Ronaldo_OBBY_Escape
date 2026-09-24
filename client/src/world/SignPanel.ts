@@ -1,7 +1,7 @@
 /**
- * The house style for a hanging sign: a dark timber board in a gold frame with
- * a red inner rule, carrying a kanji seal and big cream lettering - a shrine
- * signboard, lit from behind by warm lantern light.
+ * The house style for a hanging sign: a navy stadium board in a gold frame
+ * with a white inner rule, carrying a round badge seal - a football or a cup -
+ * and big white lettering, lit from behind by floodlight glow.
  *
  * Extracted so the Train Speed banner and the Win Shop sign are literally the
  * same treatment rather than two drawings that happen to look alike - a second
@@ -19,20 +19,20 @@ import {
   type CanvasTexture,
 } from 'three';
 import { createGlowTexture } from './GlowTexture.js';
-import { DISPLAY_FONT, KANJI_FONT, drawBlossom } from './JapaneseArt.js';
+import { DISPLAY_FONT, drawCup, drawFootball, drawStar } from './WorldArt.js';
 
 /** Board fill and its gold frame. */
-const PANEL_FILL = '#3a2a22';
+const PANEL_FILL = '#14203a';
 const PANEL_STROKE = '#f2c14e';
 
-/** Dark timber the surrounding frame mesh is painted. */
-export const SIGN_FRAME_COLOR = 0x2a1d17;
+/** Deep navy the surrounding frame mesh is painted. */
+export const SIGN_FRAME_COLOR = 0x0f1728;
 
 /** How far the frame mesh oversails the panel, in world units. */
 export const SIGN_FRAME_MARGIN = 0.7;
 
-/** Warm lantern light the sign frames are lit with. */
-export const SIGN_GLOW_COLOR = 0xffa24a;
+/** Warm floodlight the sign frames are lit with. */
+export const SIGN_GLOW_COLOR = 0xffd66b;
 
 /** How far the halo reaches past the frame, in WORLD units. */
 const GLOW_SPREAD = 1.5;
@@ -56,7 +56,7 @@ export interface SignGlow {
 }
 
 /**
- * The frame's material: dark blue, lit from within.
+ * The frame's material: deep navy, lit from within.
  *
  * Shared by both signs so the pair cannot drift apart - the same reason
  * `drawSign` exists. The emissive term is what keeps the frame bright at
@@ -127,12 +127,15 @@ export const createSignGlow = (frameWidth: number, frameHeight: number): SignGlo
  */
 const ICON_IMAGE_SCALE = 1.5;
 
+/** What a sign's round badge seal shows. */
+export type SignSeal = 'ball' | 'cup';
+
 export interface SignOptions {
   /**
-   * Kanji stamped in a red seal to the left of the label. Takes the icon's
-   * slot; the English label is always the readable part.
+   * A round badge to the left of the label - a football or a trophy cup.
+   * Takes the icon's slot; the label is always the readable part.
    */
-  readonly kanji?: string;
+  readonly seal?: SignSeal;
   /** Emoji shown to the left of the label. Omit for text only. */
   readonly icon?: string;
   /**
@@ -165,35 +168,32 @@ export const drawSign = (label: string, options: SignOptions = {}): HTMLCanvasEl
   const ctx = canvas.getContext('2d');
   if (!ctx) return canvas;
 
-  // Board: dark timber, a gold frame, a red inner rule and wood grain.
+  // Board: navy with a floodlit sheen, a gold frame, a white inner rule and a
+  // faint LED grid.
   const inset = 8;
   const radius = Math.min(22, height * 0.12);
-  const grain = ctx.createLinearGradient(0, 0, 0, height);
-  grain.addColorStop(0, '#4a352a');
-  grain.addColorStop(0.5, PANEL_FILL);
-  grain.addColorStop(1, '#2a1d17');
-  ctx.fillStyle = grain;
+  const sheen = ctx.createLinearGradient(0, 0, 0, height);
+  sheen.addColorStop(0, '#24365e');
+  sheen.addColorStop(0.5, PANEL_FILL);
+  sheen.addColorStop(1, '#0b1224');
+  ctx.fillStyle = sheen;
   ctx.strokeStyle = PANEL_STROKE;
   ctx.lineWidth = Math.max(6, height * 0.05);
   ctx.beginPath();
   ctx.roundRect(inset, inset, width - inset * 2, height - inset * 2, radius);
   ctx.fill();
   ctx.stroke();
-  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-  ctx.lineWidth = 2;
-  for (let y = inset + 18; y < height - inset; y += 22) {
-    ctx.beginPath();
-    ctx.moveTo(inset + 20, y);
-    ctx.bezierCurveTo(width * 0.3, y + 5, width * 0.7, y - 5, width - inset - 20, y);
-    ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.05)';
+  for (let x = inset + 16; x < width - inset - 16; x += 10) {
+    for (let y = inset + 14; y < height - inset - 14; y += 10) ctx.fillRect(x, y, 3, 3);
   }
-  ctx.strokeStyle = '#c8281e';
+  ctx.strokeStyle = '#f4f6fb';
   ctx.lineWidth = Math.max(3, height * 0.02);
   ctx.beginPath();
   ctx.roundRect(inset + 14, inset + 12, width - (inset + 14) * 2, height - (inset + 12) * 2, radius * 0.6);
   ctx.stroke();
-  drawBlossom(ctx, inset + 38, height / 2, height * 0.1, '#ff9cc0');
-  drawBlossom(ctx, width - inset - 38, height / 2, height * 0.1, '#ff9cc0');
+  drawStar(ctx, inset + 38, height / 2, height * 0.1, '#f2c14e');
+  drawStar(ctx, width - inset - 38, height / 2, height * 0.1, '#f2c14e');
 
   // Text, sized to the panel so a long label still fits.
   const fontSize = height * 0.44;
@@ -207,37 +207,29 @@ export const drawSign = (label: string, options: SignOptions = {}): HTMLCanvasEl
   ctx.font = textFont;
   const labelWidth = ctx.measureText(label).width;
 
-  // The kanji seal: a red hanko square with the characters in cream.
-  const sealChars = options.kanji ? [...options.kanji] : [];
-  const sealSize = height * 0.62;
-  if (sealChars.length > 0) {
-    const sealWidth = sealSize * (sealChars.length > 1 ? 1.6 : 1);
-    const total = sealWidth + gap + labelWidth;
+  // The badge seal: a red roundel ringed in white, carrying a ball or a cup.
+  const sealSize = height * 0.64;
+  if (options.seal) {
+    const total = sealSize + gap + labelWidth;
     const x0 = (width - total) / 2;
-    const y0 = (height - sealSize) / 2;
-    ctx.fillStyle = '#c8281e';
-    ctx.strokeStyle = '#fff4e0';
-    ctx.lineWidth = Math.max(3, height * 0.02);
+    const cx = x0 + sealSize / 2;
+    const cy = height / 2;
+    ctx.fillStyle = '#c8102e';
+    ctx.strokeStyle = '#f4f6fb';
+    ctx.lineWidth = Math.max(3, height * 0.025);
     ctx.beginPath();
-    ctx.roundRect(x0, y0, sealWidth, sealSize, sealSize * 0.12);
+    ctx.arc(cx, cy, sealSize / 2, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = '#fff4e0';
-    ctx.textAlign = 'center';
-    const charSize = sealChars.length > 1 ? sealSize * 0.66 : sealSize * 0.78;
-    ctx.font = `900 ${charSize}px ${KANJI_FONT}`;
-    sealChars.forEach((c, i) => {
-      const cx = x0 + (sealWidth / (sealChars.length + 0)) * (i + 0.5);
-      ctx.fillText(c, cx, height / 2 + charSize * 0.04);
-    });
-    ctx.textAlign = 'left';
-    const lx = x0 + sealWidth + gap;
+    if (options.seal === 'ball') drawFootball(ctx, cx, cy, sealSize * 0.34);
+    else drawCup(ctx, cx, cy + sealSize * 0.04, sealSize * 0.36, '#ffd84a');
+    const lx = x0 + sealSize + gap;
     ctx.font = textFont;
     ctx.lineJoin = 'round';
     ctx.lineWidth = fontSize * 0.19;
-    ctx.strokeStyle = 'rgba(20,10,8,0.95)';
+    ctx.strokeStyle = 'rgba(6,10,22,0.95)';
     ctx.strokeText(label, lx, height / 2 + fontSize * 0.04);
-    ctx.fillStyle = '#fff4e0';
+    ctx.fillStyle = '#ffffff';
     ctx.fillText(label, lx, height / 2 + fontSize * 0.04);
     return canvas;
   }
@@ -272,9 +264,9 @@ export const drawSign = (label: string, options: SignOptions = {}): HTMLCanvasEl
   ctx.font = textFont;
   ctx.lineJoin = 'round';
   ctx.lineWidth = fontSize * 0.19;
-  ctx.strokeStyle = 'rgba(20,10,8,0.95)';
+  ctx.strokeStyle = 'rgba(6,10,22,0.95)';
   ctx.strokeText(label, x, y);
-  ctx.fillStyle = '#fff4e0';
+  ctx.fillStyle = '#ffffff';
   ctx.fillText(label, x, y);
 
   return canvas;

@@ -20,15 +20,15 @@ import {
 import { WORLD_FOG } from '../config/worldVisuals.js';
 
 /**
- * The anime sky: a gradient dome with a sun (later a crimson moon), painted
- * mountain ranges, drifting cloud banks and a low mist - and the lighting
- * that goes with them.
+ * The sky: a gradient dome with a sun (later a moon), painted mountain
+ * ranges, drifting cloud banks and a low mist - and the lighting that goes
+ * with them.
  *
  * All of it keys off how far down the route the camera is. The first islands
- * sit in a clear spring afternoon; the mountain islands go golden, then misty;
- * the floating shrines at the end burn under a sunset that falls into a
- * starlit night. The world darkens as it gets more epic, which is the whole
- * arc of the route told without a word of UI.
+ * sit in a clear match-day afternoon; the mountain islands go golden, then
+ * misty; the last islands burn under a sunset that falls into a starlit night
+ * match. The world darkens as it gets more epic, which is the whole arc of
+ * the route told without a word of UI.
  *
  * Every layer follows the camera's POSITION (never its rotation), so each one
  * behaves as if infinitely far away, and none of it is part of the gameplay
@@ -61,7 +61,7 @@ interface Keyframe {
 const KEYFRAMES: readonly Keyframe[] = [
   {
     at: 0,
-    top: '#3f86e6', horizon: '#ffd8e2', fog: '#f8dbe3', fogNear: WORLD_FOG.near, fogFar: WORLD_FOG.far,
+    top: '#3f86e6', horizon: '#dcefff', fog: '#e2eef8', fogNear: WORLD_FOG.near, fogFar: WORLD_FOG.far,
     sun: '#fff1dc', sunIntensity: 2.0, hemiSky: '#d6e8ff', hemiGround: '#8a6f5a', hemiIntensity: 1.05, ambient: 0.32,
     disc: '#fff6d8', discSize: 0.035,
     farRange: '#a9b9dc', nearRange: '#7892be', cloud: '#ffffff', mist: 0.35, stars: 0,
@@ -98,7 +98,7 @@ const KEYFRAMES: readonly Keyframe[] = [
     at: 39,
     top: '#080824', horizon: '#5c1a3c', fog: '#3c1a3a', fogNear: 170, fogFar: 860,
     sun: '#d0c0ff', sunIntensity: 1.25, hemiSky: '#7272c4', hemiGround: '#221832', hemiIntensity: 1.0, ambient: 0.5,
-    disc: '#ff5a5a', discSize: 0.09,
+    disc: '#f4f0ff', discSize: 0.09,
     farRange: '#2c1a40', nearRange: '#160c24', cloud: '#8a5a9a', mist: 0.35, stars: 1,
   },
 ];
@@ -130,9 +130,7 @@ export interface AtmosphereLights {
 export class SkyAtmosphere {
   readonly root = new Group();
 
-  /** Colour the ambient petals should take here. Read by SakuraPetals. */
-  readonly petalColor = new Color('#ffb8d0');
-  /** 0 by day, 1 at night - lantern-lit things may brighten with it. */
+  /** 0 by day, 1 at night - floodlit things may brighten with it. */
   night = 0;
 
   private readonly dome: Mesh;
@@ -190,7 +188,7 @@ export class SkyAtmosphere {
         void main() {
           vec3 dir = normalize(vDir);
           float h = dir.y;
-          // Anime skies are saturated overhead and melt into a bright band.
+          // Cartoon skies are saturated overhead and melt into a bright band.
           float t = pow(clamp(h, 0.0, 1.0), 0.55);
           vec3 color = mix(uHorizon, uTop, t);
           // A hot band just above the horizon.
@@ -228,7 +226,7 @@ export class SkyAtmosphere {
 
     this.fog = new Fog(0xffffff, WORLD_FOG.near, WORLD_FOG.far);
     scene.fog = this.fog;
-    scene.background = new Color(KEYFRAMES[0]?.horizon ?? '#ffd8e2');
+    scene.background = new Color(KEYFRAMES[0]?.horizon ?? '#dcefff');
     scene.add(this.root);
     this.apply(0);
   }
@@ -325,8 +323,6 @@ export class SkyAtmosphere {
     this.mistMaterial.opacity = num('mist');
 
     this.night = Math.min(1, stars * 1.2);
-    // Petals blush pink by day and turn ember-red under the late sky.
-    this.petalColor.set('#ffbcd4').lerp(this.scratch.a.set('#ff6a5a'), Math.min(1, progress / 36) ** 2);
   }
 }
 
@@ -423,7 +419,7 @@ const drawRange = (width: number, height: number, seed: number, far: boolean): H
   return canvas;
 };
 
-/** Long anime cloud banks: flat bottoms, billowing tops, soft edges. */
+/** Long cartoon cloud banks: flat bottoms, billowing tops, soft edges. */
 const drawClouds = (width: number, height: number): HTMLCanvasElement => {
   const canvas = document.createElement('canvas');
   canvas.width = width;

@@ -359,9 +359,12 @@ export class LocalPlayer {
     return MOVEMENT.runSpeed * this.params.moveMultiplier;
   }
 
-  /** Show the boot the server says this player has equipped. Cosmetic only. */
-  setBootSlot(slot: number): void {
-    this.character.boots.setSlot(slot);
+  /**
+   * Become the Ronaldo the server says this player has equipped - the tier
+   * replicated as `bootSlot`. Cosmetic only.
+   */
+  setRonaldoSlot(slot: number): void {
+    this.character.setOutfit(slot);
   }
 
   /** Show the trail and aura the server says this player has equipped. */

@@ -1,4 +1,4 @@
-# CLAUDE.md — +1 Backflip Obby Escape
+# CLAUDE.md — +1 Ronaldo Obby Escape
 
 Permanent project rules and design constraints. Read this before changing anything.
 
@@ -6,6 +6,30 @@ Permanent project rules and design constraints. Read this before changing anythi
 
 A **production** browser multiplayer obby game. Not a demo, not a prototype.
 "Roblox-inspired" describes the **visual and gameplay style only**.
+
+## Origin: a reskin of +1 Backflip Obby Escape
+
+This game is +1 Backflip Obby Escape reskinned as a football / Cristiano
+Ronaldo game. The reskin was deliberately PRESENTATION ONLY - gameplay,
+progression, costs, speeds, physics, map layout, networking, persistence and
+the Bloxity integration are exactly the Backflip game's. What changed:
+
+- **Boots -> Ronaldo characters.** The nine boot tiers are nine Ronaldos, his
+  career in order (`BOOT_TIERS` names; looks in
+  `client/src/config/ronaldoKits.ts`). Owning the best tier turns the player
+  INTO that Ronaldo - see "Ronaldo characters" below. Prices, Speed per step
+  and slots are byte-for-byte the boot ladder's.
+- **Backflip -> Siuuu.** A flip is the same flip (lift, forward push, chaining,
+  capacity); only its picture is Ronaldo's celebration. See Animation.
+- **Japan -> football.** Shrines, torii, sakura and lanterns became a stadium:
+  a giant goal, a grandstand, floodlights, LED hoardings, flags and bunting.
+  Terrain, islands, gaps, redlines and collision are untouched.
+- **Identifiers are NOT renamed.** `bootSlot`, `ownedBoots`, `buyBoot`,
+  `BootService`, `BootShop`, `backflipCapacity`, `flipCount`, the
+  `Backflip`/`ChainedBackflip` animation states - all are replicated,
+  persisted or validated, and renaming them would be a network and save-format
+  change for no gameplay reason. Read "boot" as "Ronaldo tier" and "backflip"
+  as "the Siuuu move" wherever they appear.
 
 ## Technology (fixed)
 
@@ -79,7 +103,8 @@ engine. Do not add a framework or a build tool without a concrete need.
   level - level 15 means fifteen flips before touching down.
 - Gaps between islands are tuned so island N needs N flips. Farming Speed is
   what physically opens the route; you cannot run your way to +100.
-- **Boots** set Speed gained per step, bought with trophy Wins. Buying is a
+- **Boots** (in this game: Ronaldo tiers - the player becomes the Ronaldo
+  of the best tier owned) set Speed gained per step, bought with trophy Wins. Buying is a
   DELIBERATE ACT: the player must walk onto a pedestal in the Win Shop while
   holding enough Wins. Reaching the Wins total alone does nothing.
   Wins are SPENT: the tier's cost is deducted on purchase. (This reverses the
@@ -170,6 +195,32 @@ engine. Do not add a framework or a build tool without a concrete need.
 - Assets are served straight from the repo `assets/` folder via Vite's
   `publicDir`. Do not copy assets into `client/`.
 
+## Ronaldo characters
+
+- A Ronaldo is not an outfit on the avatar: the WHOLE character becomes him.
+  `AvatarAppearance.setOutfit(slot)` takes precedence over the player's
+  Bloxity look - his atlas on the character's own material, Bloxity's default
+  part for every slot, his hair in place of any hat, no back item, neutral
+  proportions. The player's own look is still recorded while he is worn.
+  `PlayerCharacter` owns its `AvatarAppearance`; the bridge (local) and the
+  remote manager feed it, and `setOutfit` is driven by the replicated
+  `bootSlot`, so every client sees the same player become the same Ronaldo.
+- The atlas (`player/ronaldo/RonaldoSkin.ts`) is PAINTED at runtime on
+  Bloxity's skin layout, read out of `player.glb`'s UVs face by face, at 8x
+  (512 px) so the face has detail. Every face is upright in its rectangle
+  except the back of the head, which the model maps rotated 180 degrees. The
+  bundled FBX shares the layout with flipped-Y UVs, so each kit carries a
+  `flipY = false` texture for the GLB body and a `flipY = true` one for the
+  FBX fallback - the fallback becomes Ronaldo too.
+- The hair cap (`RonaldoHair.ts`) is seated on Neck1 FROM THE BIND POSE, in
+  the model's parent frame, so it sits right on both bodies without assuming
+  a bone axis. Anything that re-materials a character touches SkinnedMesh
+  only; a plain-Mesh pass would paint the hair with the kit.
+- The Win Shop's figures and the golden statue at spawn are
+  `createRonaldoFigure` - the same body, atlas and hair a player becomes,
+  posed once. They need the body, so they are stood up by
+  `GorgeWorld.populateFigures` after the model loads.
+
 ## Animation
 
 Procedural, bone-driven, and required for the finished game — not a placeholder.
@@ -183,8 +234,17 @@ Procedural, bone-driven, and required for the finished game — not a placeholde
 - Poses are authored in **character space** (`+X` pitch swings a limb backward)
   and resolved onto each bone's baked local axes by `PlayerRig`. Every frame
   rebuilds `rotation * restQuaternion` from scratch, so posing cannot drift.
-- Backflips rotate a **flip pivot** at hip height inside the character, plus a
-  bone tuck. Never rotate the whole rendered object.
+- A backflip is SHOWN as Ronaldo's **Siuuu** (`SiuuuAnimator`, `SIUUU_ANIM`):
+  the flip pivot at hip height spins about the character's UP axis - one full
+  turn per flip, so the character always ends facing where it runs - with the
+  arms flung wide, snapping into the SIU stance (legs apart, arms driven down
+  and out, chest up) as each turn completes. After a celebration the fall is
+  held in the stance and the landing is the stance sunk into the knees. It is
+  purely the picture: the flip's gameplay is unchanged. Never rotate the whole
+  rendered object.
+- Roll (`z`) turns a limb about the character's FORWARD axis, so on the LEFT
+  limbs (at +X) a POSITIVE roll swings the limb OUTWARD and on the right limbs
+  a negative one does. Getting the sign backwards crosses the arms and legs.
 - The flip's lift and forward impulse are applied by `LocalPlayer`, which owns
   velocity — **never by the animator**. The animator stays purely visual: it
   writes bones, the flip pivot and the bob node, and nothing else. Keeping the
@@ -200,9 +260,13 @@ Procedural, bone-driven, and required for the finished game — not a placeholde
 
 ## World
 
-- **One torii on the route: the great gate over the gorge mouth**
-  (`SpawnDecor`). Gates per island made the river a corridor of red frames;
-  do not add scenery gates along the river.
+- **One goal on the route: the giant goal over the gorge mouth**
+  (`SpawnDecor`), its net stretched back over the river. Frames per island made
+  the river a corridor of gates; do not add scenery goals along the river.
+- The world is a stadium: every prop comes from `world/WorldProps.ts`, every
+  painted texture from `world/WorldArt.ts`, both procedural (no image files).
+  Island names are his career (`AREA_THEMES` in `config/worldVisuals.ts`),
+  keyed by the SHARED area names, which stay the islands' identity.
 - The island ladder is **generated, not authored past the opening**. The
   hand-tuned first ten islands end exactly at the rebirth-0 level cap; every
   island after that continues the same curve by compounding (`GAP_GROWTH`,
@@ -539,12 +603,14 @@ api.bloxity.io) - there is one code path, never a branch on environment.
   Verified answers are cached briefly (capped at the token's exp), rejected
   ones for 30s, keyed by a hash of the token. Never verify the JWT locally:
   `JWT_SECRET` is the game's own secret, not Bloxity's key.
-- **The slug is `anime-backflip-escape`** (`shared/src/config/bloxity.ts`,
+- **The slug is `ronaldo-obby-escape`** (`shared/src/config/bloxity.ts`,
   the bloxity.io/g/<slug> page), used by BOTH the client's `init` and the
   server's verification. A token is a capability for one game: verifying
-  against any other slug rejects every signed-in player, which is exactly how
-  progress stayed per-browser while it said `1-backflip-obby-escape`. It is
-  NOT the hosting id `speed-backflip-escape` (Legion's `BLOXITY_GAME_ID`).
+  against any other slug rejects every signed-in player and progress silently
+  stays per-browser. It is a separate registration from the hosting id
+  (Legion's `BLOXITY_GAME_ID`, also `ronaldo-obby-escape` in the deploy
+  workflow) - if the portal registers either differently, change it there and
+  in the workflow's bundle check.
 - Guests keep the browser key; `guestKeyFrom` refuses the `bloxity:`
   namespace so it cannot be forged. An account that has a profile ALWAYS wins
   and is never touched by browser data. On an account's FIRST verified login a

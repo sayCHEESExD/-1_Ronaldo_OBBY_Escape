@@ -336,6 +336,9 @@ export class Game {
 
     this.modelReport = await playerModelLoader.load();
     this.overlay?.setModelReport(this.modelReport);
+    // The Win Shop's Ronaldos and the spawn statue are the same body every
+    // character uses, so they can only be stood up once it has loaded.
+    this.world.populateFigures();
 
     this.localPlayer = new LocalPlayer(this.world.collision);
     this.sceneManager.scene.add(this.localPlayer.character.root);
@@ -778,7 +781,7 @@ export class Game {
       rebirths: player.rebirths,
     });
     this.shop.setState(player.wins, player.ownedBoots);
-    this.localPlayer?.setBootSlot(player.bootSlot);
+    this.localPlayer?.setRonaldoSlot(player.bootSlot);
     this.localPlayer?.setCosmetics(player.trailSlot, player.auraSlot);
     this.trailShop.setState(player.wins, player.ownedTrails, player.trailSlot);
     this.auraShop.setState(player.wins, player.ownedAuras, player.auraSlot);

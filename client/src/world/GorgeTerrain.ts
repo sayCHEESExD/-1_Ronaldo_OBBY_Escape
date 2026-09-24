@@ -1,7 +1,7 @@
 import { BANK_WALL, GORGE, GORGE_HEAD } from '@obby/shared';
 import { BoxGeometry, Group, Mesh, type Texture } from 'three';
 import { WORLD_COLORS } from '../config/worldVisuals.js';
-import { cliffRock, grass, riverWater } from './JapaneseArt.js';
+import { cliffRock, grass, riverWater } from './WorldArt.js';
 import { toon } from './ToonKit.js';
 import type { WorldTextures } from './WorldTextures.js';
 

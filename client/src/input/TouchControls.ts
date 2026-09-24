@@ -112,7 +112,7 @@ export class TouchControls {
     this.jumpButton = document.createElement('button');
     this.jumpButton.className = 'obby-touch__jump';
     this.jumpButton.type = 'button';
-    this.jumpButton.setAttribute('aria-label', 'Jump and backflip');
+    this.jumpButton.setAttribute('aria-label', 'Jump and Siuuu');
     this.jumpButton.textContent = '⤴';
 
     this.root.append(this.stick, this.jumpButton);

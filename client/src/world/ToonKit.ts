@@ -11,12 +11,12 @@ import {
 } from 'three';
 
 /**
- * The anime cel-shading kit: one gradient ramp, a material cache and the wind.
+ * The cel-shading kit: one gradient ramp, a material cache and the wind.
  *
- * Every piece of scenery in the Japanese world is lit through the same three
- * step ramp, which is most of what makes a box read as "anime" rather than
- * "low poly". Materials are cached by their parameters, so a thousand stone
- * lanterns share one material and one program.
+ * Every piece of scenery in the world is lit through the same three step
+ * ramp, which is most of what makes a box read as "cartoon" rather than
+ * "low poly". Materials are cached by their parameters, so a thousand
+ * lamp posts share one material and one program.
  *
  * Purely visual. Nothing here knows about collision or gameplay.
  */
@@ -103,7 +103,7 @@ export const toon = (color: number, options: ToonOptions = {}): MeshToonMaterial
   return material;
 };
 
-/** A cached unlit material - lantern paper, glowing trim, anything that emits. */
+/** A cached unlit material - floodlight lamps, glowing trim, anything that emits. */
 export const glow = (color: number, options: { map?: Texture; doubleSide?: boolean } = {}): MeshBasicMaterial => {
   const key = ['glow', color, options.map?.uuid ?? '', options.doubleSide ? 'ds' : ''].join(':');
   const existing = cache.get(key);

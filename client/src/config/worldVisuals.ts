@@ -1,11 +1,11 @@
 /**
- * Visual palette and tuning for the anime Japanese mountain world.
+ * Visual palette and tuning for the football world.
  *
  * Colour and presentation only - every coordinate, gap and reward lives in
  * `@obby/shared`'s gorge config and is untouched by anything here. The world
- * is ink black, lacquer red, cream, sakura pink and moss green, lit through a
- * cel-shading ramp (`world/ToonKit.ts`) so it reads as anime rather than as
- * a recoloured obby.
+ * is club red, pitch green, kit white, navy and trophy gold over the same
+ * gorge, lit through a cel-shading ramp (`world/ToonKit.ts`) so it keeps its
+ * bright cartoon read.
  */
 export const WORLD_COLORS = {
   /** The river running the gorge floor. Still the death zone; now it flows. */
@@ -17,135 +17,126 @@ export const WORLD_COLORS = {
   rockDark: '#5f564e',
   rockLight: '#a89c8c',
   rockMoss: '#6f9a4a',
-  /** Stylised grass on the rims and the shrine grounds. */
+  /** Stylised grass on the rims and the stadium grounds. */
   grass: '#79b64a',
   grassDark: '#5c9a38',
   grassLight: '#9ccf5e',
-  /** Compound wall: cream plaster over a dark timber base. */
-  plaster: '#f3e8d2',
-  plasterLine: '#dccfb4',
-  timber: 0x3a2a22,
-  /** Tiled roofs - kawara, blue-grey slate. */
-  roofTile: 0x3c4458,
-  /** Vermilion lacquer: torii, pillars, bridges. */
-  vermilion: 0xe0412c,
-  lacquerRed: 0xb3261e,
+  /** Club and country colours. */
+  red: 0xc8102e,
+  green: 0x1f9d55,
+  white: 0xf4f6fb,
+  navy: 0x14203a,
   /** Ink black trim. */
-  ink: 0x1b1416,
-  /** Gold leaf and finials. */
+  ink: 0x15171c,
+  /** Trophy gold. */
   gold: 0xf2c14e,
-  /** Stone lanterns and path stones. */
+  /** Floodlight masts, rails and stanchions. */
+  steel: 0x9aa3b2,
+  /** Stadium concrete. */
+  concrete: 0x8f98a8,
+  /** Boulders and plinths. */
   stone: 0xa7a293,
   stoneDark: 0x7c786c,
-  /** Paper lantern glow. */
-  lanternGlow: 0xffb35c,
-  /** Sakura blossom and bark. */
-  sakura: 0xffb3cf,
-  sakuraDeep: 0xf57fa8,
+  /** Floodlight glow. */
+  lampGlow: 0xfff4d6,
+  /** Broadleaf canopies and bark. */
+  leaf: 0x5fae4a,
+  leafDeep: 0x3f8f3a,
+  leafLight: 0x8cc85c,
   bark: 0x5a3b2e,
-  /** Japanese black pine. */
+  /** Pines along the rims. */
   pine: 0x3f7a45,
-  /** Autumn maple, late route. */
-  maple: 0xe8472e,
-  /** Bamboo culms and leaves. */
-  bamboo: 0x7fbf4a,
+  /** Autumn canopy, late route. */
+  autumn: 0xe8872e,
   /** Hazard lines. Kept pure red - a hazard must never become decoration. */
   redline: 0xff2b2b,
   /** Win Shop pedestal stands. */
   collectionPad: 0xc8281e,
   /** Fallback fog colour; the live one is driven by `SkyAtmosphere`. */
-  sky: 0xffd9e2,
+  sky: 0xcfe8ff,
 } as const;
-
-/** How an island's deck surface is drawn. */
-export type DeckStyle = 'planks' | 'stone' | 'lacquer';
 
 /** Route stage: the world grows more dramatic the further the player goes. */
 export type RouteStage = 'early' | 'mid' | 'late';
 
-/** Presentation for one island. Identity (the key) and gameplay stay in shared. */
+/**
+ * Presentation for one island. Identity (the key) and gameplay stay in shared.
+ *
+ * Every island is the same bright pitch grass now, and no sign hangs over
+ * any of them - the name plaques blocked the flight path. The names stay as
+ * the route's story, and `stage` still grades the scenery along it.
+ */
 export interface AreaTheme {
-  /** English display name - gameplay information stays readable. */
+  /** The island's name in his story. Not currently shown anywhere. */
   readonly name: string;
-  /** Japanese title painted on the island plaque. */
-  readonly kanji: string;
-  /** Tint of the island's deck. */
-  readonly deck: number;
-  readonly deckStyle: DeckStyle;
+  /** The chapter of his story it stands for. Not currently shown anywhere. */
+  readonly subtitle: string;
   readonly stage: RouteStage;
 }
 
-const early = (name: string, kanji: string, deck: number): AreaTheme => ({
-  name, kanji, deck, deckStyle: 'planks', stage: 'early',
-});
-const mid = (name: string, kanji: string, deck: number): AreaTheme => ({
-  name, kanji, deck, deckStyle: 'stone', stage: 'mid',
-});
-const late = (name: string, kanji: string, deck: number): AreaTheme => ({
-  name, kanji, deck, deckStyle: 'lacquer', stage: 'late',
-});
+const early = (name: string, subtitle: string): AreaTheme => ({ name, subtitle, stage: 'early' });
+const mid = (name: string, subtitle: string): AreaTheme => ({ name, subtitle, stage: 'mid' });
+const late = (name: string, subtitle: string): AreaTheme => ({ name, subtitle, stage: 'late' });
 
 /**
  * Per-island presentation, keyed by the SHARED area name.
  *
- * The shared name is the island's identity and is never shown any more; the
- * player sees `name` and `kanji` instead. Keeping the key means the server,
- * the route and every reward are exactly as they were.
+ * The shared name is the island's identity and is never shown; the player
+ * sees `name` and `subtitle` instead. Keeping the key means the server, the
+ * route and every reward are exactly as they were.
  *
- * Sakura gardens and shrine paths first, then mountain cliffs, bamboo and
- * waterfalls, then floating shrines under a darkening sky.
+ * The route is his career: the streets of Madeira and the academy first, then
+ * the great clubs and the records, then beyond anything a footballer has done
+ * under a sky that darkens into night-match floodlight.
  */
 export const AREA_THEMES: Readonly<Record<string, AreaTheme>> = {
-  'Starter Area': early('Sakura Gate', '桜門', 0xf2c9a4),
-  'Cloud Area': early('Shrine Path', '参道', 0xeab98c),
-  'Volcano Area': early('Lantern Walk', '灯籠', 0xe2aa7a),
-  'Tsunami Area': early('Koi Pond', '鯉池', 0xdba272),
-  'Hot Area': early('Maple Bridge', '紅葉橋', 0xe49c76),
-  'Nature Area': early('Tea Garden', '茶庭', 0xcaa56c),
-  'Crystal Area': early('Moon Garden', '月庭', 0xdab690),
-  'Thunder Area': early('Plum Grove', '梅林', 0xe2a4a4),
-  'Ancient Area': early('Dojo Steps', '道場', 0xcb9162),
-  'Space Island': early('Temple Gate', '山門', 0xda8a72),
-  'Nebula Area': mid('Bamboo Grove', '竹林', 0xbcc49c),
-  'Comet Area': mid('Misty Cliffs', '霧崖', 0xb8bcb4),
-  'Meteor Area': mid('Waterfall Ledge', '滝', 0xaec0c4),
-  'Orbit Area': mid('Crane Peak', '鶴峰', 0xc8c6b8),
-  'Galaxy Area': mid('Stone Stairs', '石段', 0xb4ae9f),
-  'Quasar Area': mid('Cedar Ridge', '杉尾根', 0xaab292),
-  'Pulsar Area': mid('Mountain Pass', '峠', 0xbeb4a4),
-  'Vortex Area': mid('Fox Shrine', '稲荷', 0xdaa484),
-  'Eclipse Area': mid('Cloud Temple', '雲寺', 0xccd0d8),
-  'Aurora Area': mid('Thunder Ridge', '雷峰', 0xbcb894),
-  'Supernova Area': mid('Dragon Spine', '龍背', 0xa3b4a4),
-  'Blackhole Area': mid('Wind Pass', '風道', 0xc0c8c4),
-  'Wormhole Area': mid('Hermit Cave', '仙洞', 0xaca294),
-  'Andromeda Area': mid('Snow Summit', '雪峰', 0xe4e8ec),
-  'Titan Area': mid('Spirit Falls', '霊滝', 0xacc8d0),
-  'Cosmos Area': late('Floating Shrine', '浮宮', 0xc8281e),
-  'Singularity Area': late('Sky Torii', '天鳥居', 0xd23a26),
-  'Infinity Area': late('Crimson Hall', '紅殿', 0xb01e2a),
-  'Oblivion Area': late('Storm Gate', '嵐門', 0x8a2a3a),
-  'Eternity Area': late('Phoenix Nest', '鳳凰', 0xe0562a),
-  'Zenith Area': late('Starfall Shrine', '星社', 0x4a3468),
-  'Abyss Area': late('Moon Palace', '月宮', 0x54428a),
-  'Radiance Area': late('Oni Gate', '鬼門', 0x7a1426),
-  'Chronos Area': late('Spirit Realm', '霊界', 0x2e5476),
-  'Elysium Area': late('Heaven Bridge', '天橋', 0x962e62),
-  'Genesis Area': late('Eclipse Temple', '蝕寺', 0x3a2334),
-  'Paragon Area': late('Dragon Palace', '龍宮', 0x1e6060),
-  'Empyrean Area': late('Void Shrine', '虚社', 0x2a1838),
-  'Everlast Area': late('Celestial Peak', '天峰', 0x62428e),
-  'Apex Area': late('Limit Break', '限界突破', 0xd4a020),
+  'Starter Area': early('Kick Off', 'The Journey Begins'),
+  'Cloud Area': early('Madeira Streets', 'Where It Started'),
+  'Volcano Area': early('Youth Academy', 'First Touch'),
+  'Tsunami Area': early('Lisbon Lights', 'The Breakthrough'),
+  'Hot Area': early('Step-Over Street', 'Skill School'),
+  'Nature Area': early('Theatre of Dreams', 'The Red Devil'),
+  'Crystal Area': early('Free-Kick Alley', 'Knuckleball'),
+  'Thunder Area': early('Header Heights', 'Rise Higher'),
+  'Ancient Area': early('Champions Night', 'First Big Trophy'),
+  'Space Island': early('Golden Ball Gate', 'The First Gold'),
+  'Nebula Area': mid('Galactico Steps', 'Madrid Calling'),
+  'Comet Area': mid('Hat-Trick Hill', 'Three And Counting'),
+  'Meteor Area': mid('Bicycle Kick Cliff', 'Overhead'),
+  'Orbit Area': mid('European Nights', 'La Decima'),
+  'Galaxy Area': mid('Golden Boot Pass', 'Top Scorer'),
+  'Quasar Area': mid('Penalty Spot', 'Nerves Of Steel'),
+  'Pulsar Area': mid('Derby Day', 'City Divided'),
+  'Vortex Area': mid('Turin Towers', 'Bianconero'),
+  'Eclipse Area': mid('Euro Glory', 'Champions Of Europe'),
+  'Aurora Area': mid("Captain's Armband", 'Lead The Way'),
+  'Supernova Area': mid('Record Breaker', 'Most Goals Ever'),
+  'Blackhole Area': mid('Stoppage Time', 'Never Give Up'),
+  'Wormhole Area': mid('Desert Stadium', 'Riyadh'),
+  'Andromeda Area': mid('Nations League', 'Another Trophy'),
+  'Titan Area': mid('Hall Of Fame', 'Immortal'),
+  'Cosmos Area': late('Golden Dome', 'Five Golden Balls'),
+  'Singularity Area': late('Crowd Roar', 'SIUUU!'),
+  'Infinity Area': late('Trophy Room', 'No Space Left'),
+  'Oblivion Area': late('Floodlight Summit', 'Under The Lights'),
+  'Eternity Area': late('Final Whistle', 'Last-Minute Winner'),
+  'Zenith Area': late('Galaxy Pitch', 'Beyond The Stars'),
+  'Abyss Area': late('Moonlight Derby', 'Night Game'),
+  'Radiance Area': late('Legend Lane', 'Greatest Ever'),
+  'Chronos Area': late('Thousand Goals', 'Keep Counting'),
+  'Elysium Area': late('Heaven Stadium', 'Sold Out'),
+  'Genesis Area': late('Eclipse Arena', 'Total Darkness'),
+  'Paragon Area': late('Diamond Pitch', 'Perfect Touch'),
+  'Empyrean Area': late('Cosmic Cup', 'Out Of This World'),
+  'Everlast Area': late('Celestial Final', 'The Last Match'),
+  'Apex Area': late('GOAT Summit', 'Limit Break'),
 };
 
 /** Fallback for an area with no theme entry. */
-export const DEFAULT_AREA_THEME: AreaTheme = early('Shrine Isle', '島', 0xdab690);
+export const DEFAULT_AREA_THEME: AreaTheme = early('Training Pitch', 'Practice');
 
-/** Thickness of the deck laid over each island. */
+/** Thickness of the grass laid over each island. */
 export const AREA_DECK_THICKNESS = 0.18;
-
-/** Height of the floating island plaque above the island surface. */
-export const AREA_LABEL_HEIGHT = 11;
 
 /** How one treadmill tier looks. Colour only - layout lives in shared. */
 export interface TreadmillTheme {
@@ -158,13 +149,13 @@ export interface TreadmillTheme {
 }
 
 /**
- * Four training machines, reading as a ladder from plain dojo wood up to a
+ * Four training machines, reading as a ladder from plain gym steel up to a
  * gold-lit one. Colour, glow and belt speed climb together.
  */
 export const TREADMILL_THEMES: readonly TreadmillTheme[] = [
-  { accent: 0xb88a5c, belt: 0xcdbb8a, intensity: 0 },
-  { accent: 0xc2783a, belt: 0xc4ae7c, intensity: 0.12 },
-  { accent: 0xe8e0d0, belt: 0xbfb088, intensity: 0.25 },
+  { accent: 0x9aa3b2, belt: 0x8a93a3, intensity: 0 },
+  { accent: 0x2f6bff, belt: 0x7d8aa6, intensity: 0.12 },
+  { accent: 0xf4f6fb, belt: 0x9aa0ae, intensity: 0.25 },
   { accent: 0xf2c14e, belt: 0xc9a864, intensity: 0.45 },
 ];
 

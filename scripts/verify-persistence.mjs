@@ -35,7 +35,7 @@ const SERVER = join(ROOT, 'server', 'dist', 'index.js');
 const PORT = Number(process.env.PERSISTENCE_PORT ?? 2690);
 const SECRET = 'verify-persistence-secret';
 const WEBHOOK = '/bloxity/bux-webhook';
-const SLUG = 'anime-backflip-escape';
+const SLUG = 'ronaldo-obby-escape';
 
 let failures = 0;
 const pass = (message) => console.log(`  ok    ${message}`);

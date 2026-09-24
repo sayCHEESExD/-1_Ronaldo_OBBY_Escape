@@ -8,34 +8,36 @@ import {
 import { Group } from 'three';
 import { AREA_THEMES, DEFAULT_AREA_THEME, type RouteStage } from '../config/worldVisuals.js';
 import {
-  MAT,
   animateWaterfalls,
   banner,
   boulder,
-  drumBridge,
+  cornerFlag,
   floatingIslet,
-  pagoda,
-  paperLantern,
-  pond,
-  shrineHall,
-  smallShrine,
-  stoneLantern,
+  floodlight,
+  football,
+  grandstand,
+  hangingLamp,
+  lampPost,
+  miniPitch,
+  trophyCup,
   waterfall,
-} from './JapaneseProps.js';
+} from './WorldProps.js';
 import { PropBatch, seededRandom, type Prop } from './PropBatch.js';
-import { bambooStand, blackPine, broadleaf, type CanopyTone, type TreeBuild } from './SakuraTrees.js';
+import { broadleaf, pineTree, type CanopyTone, type TreeBuild } from './Trees.js';
 import { routeProgress } from './SkyAtmosphere.js';
 
 /**
- * Everything along the route that is not the route: the forests and shrines
- * on the canyon rims, waterfalls pouring down the cliffs, floating islets
- * beside the islands, and the lanterns hung beneath each island.
+ * Everything along the route that is not the route: the trees and the
+ * football landmarks on the canyon rims - floodlight towers, grandstands,
+ * practice pitches, giant footballs and trophies - waterfalls pouring down the
+ * cliffs, floating islets beside the islands, and the stadium lamps hung
+ * beneath each island.
  *
  * NONE of it enters the playable channel. Trees stand on the rims (|x| >= 33),
- * islets float at |x| ~ 20 - outside the |x| <= 13 channel - and lanterns hang
- * UNDER the islands. There are no torii along the river: the one gate on the
- * route is the great torii over the gorge mouth, in SpawnDecor. The route's collision is untouched because
- * none of this is collision at all.
+ * islets float at |x| ~ 20 - outside the |x| <= 13 channel - and lamps hang
+ * UNDER the islands. There are no goals along the river: the one goal on the
+ * route is the giant goal over the gorge mouth, in SpawnDecor. The route's
+ * collision is untouched because none of this is collision at all.
  *
  * Placement is seeded, so every client sees the identical world; and it is
  * batched into chunked instanced draws, so a 70 km route costs a handful of
@@ -50,13 +52,12 @@ const stageAt = (z: number): RouteStage => {
   return 'late';
 };
 
-/** Tree spacing along the rim per stage: dense gardens, then open mountains. */
+/** Tree spacing along the rim per stage: dense parkland, then open mountains. */
 const TREE_STEP: Record<RouteStage, number> = { early: 7, mid: 20, late: 36 };
 
 /** Seeds per tree build - distinct silhouettes, few enough to batch well. */
 const TREE_SEEDS = [101, 202] as const;
 const PINE_SEEDS = [301, 302, 303] as const;
-const BAMBOO_SEEDS = [401, 402] as const;
 
 export class RouteDecor {
   readonly root = new Group();
@@ -74,16 +75,10 @@ export class RouteDecor {
     batch.build(this.root);
   }
 
-  /** Waterfalls, lantern flicker. The wind itself is ticked by the world. */
+  /** Waterfalls. The wind itself is ticked by the world. */
   update(delta: number): void {
     this.time += delta;
     animateWaterfalls(delta);
-    // A slow, uneven candle flicker. Shared materials, so every lantern in
-    // the world breathes together at the cost of two colour writes.
-    const t = this.time;
-    const flicker = 0.9 + 0.06 * Math.sin(t * 7.3) + 0.04 * Math.sin(t * 13.1 + 1.7);
-    MAT.lanternPaper().color.setScalar(flicker);
-    MAT.lanternLight().color.setRGB(1, 0.85 * flicker, 0.54 * flicker);
   }
 
   dispose(): void {
@@ -96,25 +91,22 @@ export class RouteDecor {
   private tree(stage: RouteStage, roll: number, pick: number): Prop {
     const seed = TREE_SEEDS[pick % TREE_SEEDS.length] as number;
     const pine = PINE_SEEDS[pick % PINE_SEEDS.length] as number;
-    const bamboo = BAMBOO_SEEDS[pick % BAMBOO_SEEDS.length] as number;
     const leaf = (build: TreeBuild, tone: CanopyTone): Prop => broadleaf(build, seed, tone);
     switch (stage) {
       case 'early':
-        if (roll < 0.14) return leaf('grand', 'sakura');
-        if (roll < 0.5) return leaf('garden', pick % 3 === 0 ? 'sakuraDeep' : 'sakura');
-        if (roll < 0.66) return leaf('umbrella', 'sakura');
-        if (roll < 0.78) return leaf('sapling', 'white');
-        return blackPine(pine);
+        if (roll < 0.14) return leaf('grand', 'leaf');
+        if (roll < 0.5) return leaf('garden', pick % 3 === 0 ? 'leafDeep' : 'leaf');
+        if (roll < 0.66) return leaf('umbrella', 'leafLight');
+        if (roll < 0.78) return leaf('sapling', 'leafLight');
+        return pineTree(pine);
       case 'mid':
-        if (roll < 0.42) return blackPine(pine);
-        if (roll < 0.68) return bambooStand(bamboo);
-        if (roll < 0.84) return leaf('garden', 'white');
-        return leaf('sapling', 'sakura');
+        if (roll < 0.5) return pineTree(pine);
+        if (roll < 0.8) return leaf('garden', 'leafDeep');
+        return leaf('sapling', 'leaf');
       case 'late':
-        if (roll < 0.4) return leaf(pick % 2 ? 'umbrella' : 'garden', 'maple');
-        if (roll < 0.68) return blackPine(pine);
-        if (roll < 0.9) return leaf('garden', 'sakuraDeep');
-        return bambooStand(bamboo);
+        if (roll < 0.4) return leaf(pick % 2 ? 'umbrella' : 'garden', 'autumn');
+        if (roll < 0.75) return pineTree(pine);
+        return leaf('garden', 'leafDeep');
     }
   }
 
@@ -158,34 +150,36 @@ export class RouteDecor {
     }
   }
 
-  /** Lanterns, banners, shrines and pagodas along the rims. */
+  /** Lamp posts, flags and football landmarks along the rims. */
   private dressRims(batch: PropBatch, random: () => number): void {
     const rimTop = BANK_WALL.rimY;
     const edge = BANK_WALL.rimX + 1.2;
 
-    // Stone lanterns and banners pacing the rim edge, densest early on.
-    const lanternStep: Record<RouteStage, number> = { early: 16, mid: 60, late: 90 };
+    // Pitch-side lamps and supporters' flags pacing the rim edge, densest
+    // early on. The lamps face the river.
+    const lampStep: Record<RouteStage, number> = { early: 16, mid: 60, late: 90 };
     let z = GORGE_HEAD.riverStartZ + 6;
     let design = 0;
     while (z < GORGE.horizonZ) {
       const stage = stageAt(z);
       for (const side of [-1, 1] as const) {
-        batch.add(stoneLantern(), { x: side * edge, y: rimTop, z, rotationY: side > 0 ? -Math.PI / 2 : Math.PI / 2 });
+        batch.add(lampPost(), { x: side * edge, y: rimTop, z, rotationY: side > 0 ? -Math.PI / 2 : Math.PI / 2 });
       }
       if (stage === 'early' || random() < 0.3) {
         const side = design % 2 === 0 ? 1 : -1;
         batch.add(banner(design % 4), {
           x: side * (edge + 1.6),
           y: rimTop,
-          z: z + lanternStep[stage] / 2,
+          z: z + lampStep[stage] / 2,
           rotationY: side > 0 ? Math.PI : 0,
         });
         design += 1;
       }
-      z += lanternStep[stage];
+      z += lampStep[stage];
     }
 
-    // A landmark on the rim beside every island, alternating sides.
+    // A landmark on the rim beside every island, alternating sides, all
+    // facing the river.
     TROPHY_PLATFORMS.forEach((platform, i) => {
       const stage = stageAt(platform.centerZ);
       const side = i % 2 === 0 ? 1 : -1;
@@ -193,13 +187,15 @@ export class RouteDecor {
       const z = platform.centerZ + 10 + random() * 20;
       const facing = side > 0 ? -Math.PI / 2 : Math.PI / 2;
       if (i % 3 === 1) {
-        batch.add(pagoda(), { x, y: rimTop, z, rotationY: random() * 0.3 });
+        batch.add(floodlight(), { x, y: rimTop, z, rotationY: facing + (random() - 0.5) * 0.4 });
+        batch.add(trophyCup(), { x: x + side * 8, y: rimTop, z: z + 6, rotationY: random() * 6, scale: 0.9 });
       } else if (i % 3 === 2 || stage === 'late') {
-        batch.add(shrineHall(), { x, y: rimTop, z, rotationY: facing });
+        batch.add(grandstand(), { x: x + side * 6, y: rimTop, z, rotationY: facing, scale: 0.7 });
       } else {
-        batch.add(smallShrine(), { x, y: rimTop, z, rotationY: facing, scale: 1.4 });
-        batch.add(pond(), { x: -side * (BANK_WALL.rimX + 18), y: rimTop, z: z + 30 });
-        batch.add(drumBridge(), { x: -side * (BANK_WALL.rimX + 18), y: rimTop, z: z + 30, rotationY: Math.PI / 2, scale: 0.55 });
+        const pitchX = -side * (BANK_WALL.rimX + 18);
+        batch.add(miniPitch(), { x: pitchX, y: rimTop, z: z + 30, rotationY: Math.PI / 2 });
+        batch.add(football(), { x: pitchX - side * 3, y: rimTop + 0.1, z: z + 32, rotationY: random() * 6, scale: 0.8 });
+        batch.add(football(), { x, y: rimTop, z, rotationY: random() * 6, scale: 2.4 });
       }
       // A couple of boulders so the ground is not a flat lawn.
       for (let b = 0; b < 3; b += 1) {
@@ -215,23 +211,24 @@ export class RouteDecor {
   }
 
   /**
-   * Each island's own dressing: a gate framing its landing edge, lanterns
-   * hung beneath it, and a floating islet beside it carrying a tree.
+   * Each island's own dressing: stadium lamps hung beneath it, and a
+   * floating islet beside it carrying a tree and a corner flag.
    */
   private dressIslands(batch: PropBatch, random: () => number): void {
     TROPHY_PLATFORMS.forEach((platform, i) => {
       const theme = AREA_THEMES[platform.area] ?? DEFAULT_AREA_THEME;
       const stage = theme.stage;
 
-      // No gate per island: the route has ONE torii, the great gate over the
-      // gorge mouth (SpawnDecor). A gate at every landing made the river a
-      // corridor of red frames.
+      // No goal per island: the route has ONE, the giant goal over the gorge
+      // mouth (SpawnDecor). A frame at every landing made the river a
+      // corridor of gates.
 
-      // Paper lanterns hung from the island's underside at each corner.
+      // Stadium lamps hung from the island's underside at each corner.
       const hookY = PLATFORM.topY - PLATFORM.thickness;
-      for (const x of [-9.5, 9.5]) {
+      const cornerX = PLATFORM.width / 2 - 1.5;
+      for (const x of [-cornerX, cornerX]) {
         for (const dz of [-4.2, 4.2]) {
-          batch.add(paperLantern(), { x, y: hookY, z: platform.centerZ + dz, rotationY: random() * 6 });
+          batch.add(hangingLamp(), { x, y: hookY, z: platform.centerZ + dz, rotationY: random() * 6 });
         }
       }
 
@@ -244,7 +241,7 @@ export class RouteDecor {
       const tree = this.tree(stage, random() * 0.5, i);
       batch.add(tree, { x: isletX, y: isletY, z: isletZ, rotationY: random() * 6, scale: 0.75 });
       if (stage !== 'mid') {
-        batch.add(stoneLantern(), { x: isletX - side * 2, y: isletY, z: isletZ + 1.5, scale: 0.8 });
+        batch.add(cornerFlag(), { x: isletX - side * 2, y: isletY, z: isletZ + 1.5 });
       }
     });
   }

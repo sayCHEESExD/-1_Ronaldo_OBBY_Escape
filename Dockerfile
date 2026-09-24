@@ -5,8 +5,8 @@
 # build context of `server/` alone has no `shared/` to resolve it against and
 # no root lockfile to install from.
 #
-#   docker build -t speed-backflip-escape-server .
-#   docker run -e PORT=2567 -p 2567:2567 speed-backflip-escape-server
+#   docker build -t ronaldo-obby-escape-server .
+#   docker run -e PORT=2567 -p 2567:2567 ronaldo-obby-escape-server
 #
 # Adapted from the working image in sayCHEESExD/-1_speed_moonwalk_escape, which
 # is deployed on this platform today. Only the package scope, the data-dir

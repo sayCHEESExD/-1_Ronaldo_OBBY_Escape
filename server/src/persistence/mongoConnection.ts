@@ -26,7 +26,7 @@ export class MongoConnection {
       connectTimeoutMS: 5000,
       retryWrites: true,
       retryReads: true,
-      appName: 'anime-backflip-escape',
+      appName: 'ronaldo-obby-escape',
     });
   }
 

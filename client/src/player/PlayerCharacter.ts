@@ -1,11 +1,11 @@
-import type { PlayerAnimationState } from '@obby/shared';
+import { STARTER_BOOT, type PlayerAnimationState } from '@obby/shared';
 import { Group, Object3D } from 'three';
 import type { AnimationInput } from '../animation/AnimationInput.js';
 import { PlayerAnimator } from '../animation/PlayerAnimator.js';
 import { AuraEffect } from './AuraEffect.js';
 import { TrailEffect } from './TrailEffect.js';
 import { PlayerRig } from '../animation/rig/PlayerRig.js';
-import { BootModel } from './BootModel.js';
+import { AvatarAppearance } from '../bloxity/AvatarAppearance.js';
 import { NamePlate } from './NamePlate.js';
 import { PLAYER_MODEL_YAW_OFFSET } from '../config/playerVisuals.js';
 import { playerModelLoader } from './PlayerModelLoader.js';
@@ -37,7 +37,12 @@ export class PlayerCharacter {
 
   readonly animator: PlayerAnimator;
   readonly rig: PlayerRig;
-  readonly boots: BootModel;
+  /**
+   * Everything this character looks like: the player's Bloxity avatar, or -
+   * whenever a Ronaldo tier is equipped, which is always in this game - that
+   * Ronaldo in its place. One owner, so the two can never both paint it.
+   */
+  readonly appearance: AvatarAppearance;
   /** Worn glow. Parented to the character, so it follows the animation. */
   readonly aura = new AuraEffect();
   /** Ribbon left behind. Lives in `worldRoot`, not on the character. */
@@ -83,8 +88,11 @@ export class PlayerCharacter {
     // the character stands or which way it faces.
     this.rig = new PlayerRig(this.model, this.model);
     this.animator = new PlayerAnimator(this.rig, this.flipPivot, this.visual);
-    // Cosmetic only - parented to the leg bones so they follow the animation.
-    this.boots = new BootModel([this.rig.getBone('LegL2'), this.rig.getBone('LegR2')]);
+    // Built while the rig is still at bind pose - it seats Ronaldo's hair from
+    // it. Every player starts as the starter Ronaldo, exactly as every player
+    // used to start in the starter boots, until the server says otherwise.
+    this.appearance = new AvatarAppearance(this);
+    this.appearance.setOutfit(STARTER_BOOT.slot);
 
     this.root.add(this.aura.root);
     this.root.add(this.namePlate.sprite);
@@ -110,6 +118,14 @@ export class PlayerCharacter {
    */
   get modelRoot(): Object3D {
     return this.model;
+  }
+
+  /**
+   * Become the Ronaldo of the tier the server says is equipped - the whole
+   * character, not an outfit on top of it. Cosmetic only.
+   */
+  setOutfit(slot: number): void {
+    this.appearance.setOutfit(slot);
   }
 
   /** Show the cosmetics the server says this player has equipped. */
@@ -168,7 +184,7 @@ export class PlayerCharacter {
   }
 
   dispose(): void {
-    this.boots.dispose();
+    this.appearance.dispose();
     this.namePlate.dispose();
     this.aura.dispose();
     this.trail.dispose();

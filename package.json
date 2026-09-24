@@ -1,8 +1,8 @@
 {
-  "name": "backflip-obby-escape",
+  "name": "ronaldo-obby-escape",
   "version": "0.1.0",
   "private": true,
-  "description": "+1 Backflip Obby Escape - browser multiplayer obby (Three.js + Colyseus)",
+  "description": "+1 Ronaldo Obby Escape - browser multiplayer obby (Three.js + Colyseus)",
   "type": "module",
   "engines": {
     "node": ">=20.11.0"

@@ -1,11 +1,14 @@
 import {
   AVATAR_PART_SLOTS,
+  DEFAULT_AVATAR_PROPORTIONS,
+  parseAvatarLook,
   resolveBloxitySkin,
   type AvatarLook,
   type AvatarPartSlot,
   type AvatarProportions,
 } from '@obby/shared';
 import {
+  Color,
   Group,
   Matrix4,
   Mesh,
@@ -17,8 +20,11 @@ import {
   type Texture,
 } from 'three';
 import type { BoneName } from '../animation/rig/boneNames.js';
+import { ronaldoKit } from '../config/ronaldoKits.js';
 import type { PlayerCharacter } from '../player/PlayerCharacter.js';
 import { playerModelLoader } from '../player/PlayerModelLoader.js';
+import { createHair, seatOnHead, setHairColor } from '../player/ronaldo/RonaldoHair.js';
+import { ronaldoSkin } from '../player/ronaldo/RonaldoSkin.js';
 import { logger } from '../util/logger.js';
 import { PART_MESH_NAMES, loadAccessory, loadPart, loadSkin } from './BloxityAvatarAssets.js';
 
@@ -30,6 +36,8 @@ const BACK_BONE: BoneName = 'Spine2';
 
 /** Where the SDK seats a hat on the head bone, in body units. */
 const HAT_OFFSET_Y = 0.8;
+
+const BLACK = new Color(0x000000);
 
 /** Rest transform of one bone, captured once so shaping never compounds. */
 interface BoneRest {
@@ -69,6 +77,15 @@ interface BoneRest {
  * the genuine fallback. That body keeps its own texture: a Bloxity skin atlas
  * is laid out for Bloxity's meshes, and wrapping it round the FBX is what put
  * a face on a leg.
+ *
+ * A RONALDO OUTFIT (`setOutfit`) takes precedence over the player's look. It
+ * is not a costume over the avatar: the whole character becomes that Ronaldo -
+ * his atlas (face, hair, kit, socks, boots) on this character's material,
+ * Bloxity's default part for every slot, his hair in place of any hat, no back
+ * item, and neutral proportions. The player's own look is still recorded
+ * while he is worn, so dropping the outfit restores it exactly. The atlas is
+ * painted for BOTH bodies (see `RonaldoSkin`), so the FBX fallback becomes
+ * Ronaldo too rather than staying the bundled figure.
  */
 export class AvatarAppearance {
   private readonly character: PlayerCharacter;
@@ -76,6 +93,16 @@ export class AvatarAppearance {
 
   /** This character's own material, shared only by its own part meshes. */
   private material: MeshStandardMaterial | null = null;
+  /** The texture the material had before any outfit, to restore on removal. */
+  private ownBaseMap: Texture | null = null;
+
+  /** The Ronaldo tier being worn, or null when the player's own look shows. */
+  private outfitSlot: number | null = null;
+  /** The player's own look, kept while an outfit hides it. */
+  private playerLook: AvatarLook | null = null;
+  /** Ronaldo's hair, seated on the head at bind pose. */
+  private readonly hairHolder = new Group();
+  private hair: Mesh | null = null;
   private readonly partMeshes = new Map<AvatarPartSlot, SkinnedMesh>();
   private readonly defaultGeometry = new Map<AvatarPartSlot, BufferGeometry>();
   private readonly boneNames: readonly string[];
@@ -110,6 +137,7 @@ export class AvatarAppearance {
     this.captureRests();
     this.neckRestScale = this.character.rig.getBone('Neck1')?.scale.clone() ?? new Vector3(1, 1, 1);
     this.attachSlots();
+    this.attachHair();
   }
 
   /**
@@ -117,10 +145,35 @@ export class AvatarAppearance {
    *
    * Idempotent and incremental: each field is compared with what is already
    * applied, so re-applying the same look - every state patch does - costs a
-   * handful of string comparisons and loads nothing.
+   * handful of string comparisons and loads nothing. While a Ronaldo outfit
+   * is worn the look is only recorded, and shown again when it comes off.
    */
   applyLook(look: AvatarLook): void {
     if (this.disposed) return;
+    this.playerLook = look;
+    if (this.outfitSlot !== null) return;
+    this.showLook(look);
+  }
+
+  /**
+   * Become the Ronaldo of a tier slot, or pass null to be the player's own
+   * avatar again. Cosmetic only - which tier is worn is the server's call.
+   */
+  setOutfit(slot: number | null): void {
+    if (this.disposed) return;
+    const next = slot === null ? null : ronaldoKit(slot).slot;
+    if (next === this.outfitSlot) return;
+    this.outfitSlot = next;
+    if (next === null) this.takeOffOutfit();
+    else this.wearOutfit(next);
+  }
+
+  /** The Ronaldo tier being worn, or null. */
+  get outfit(): number | null {
+    return this.outfitSlot;
+  }
+
+  private showLook(look: AvatarLook): void {
     if (this.bloxityBody) {
       this.applySkin(resolveBloxitySkin(look.skin));
       for (const slot of AVATAR_PART_SLOTS) this.applyPart(slot, look.parts[slot]);
@@ -139,12 +192,104 @@ export class AvatarAppearance {
     this.disposed = true;
     this.hatSlot.removeFromParent();
     this.backSlot.removeFromParent();
+    this.hairHolder.removeFromParent();
     this.hatSlot.clear();
     this.backSlot.clear();
-    // Part geometries, skins and accessory meshes are shared caches and are
-    // NOT disposed with one character. Only this character's material is.
+    this.hairHolder.clear();
+    // Part geometries, skins, accessory meshes, Ronaldo atlases and the hair
+    // cap are shared caches and are NOT disposed with one character. Only
+    // this character's material is.
     this.material?.dispose();
     this.material = null;
+  }
+
+  // --- Ronaldo outfit ---------------------------------------------------
+
+  /**
+   * Replace the whole character with a Ronaldo.
+   *
+   * Every in-flight CDN load for the player's look is superseded first (its
+   * generation bumped), so a slow skin or part cannot land on top of him.
+   */
+  private wearOutfit(slot: number): void {
+    const kit = ronaldoKit(slot);
+    this.nextGeneration('skin');
+    this.nextGeneration('hat');
+    this.nextGeneration('back');
+    for (const part of AVATAR_PART_SLOTS) this.nextGeneration(`part:${part}`);
+
+    // The player's look is re-applied from scratch when the outfit comes off -
+    // every asset is cached, so that costs no download. The accessory ids are
+    // forgotten too: a hat still loading was just superseded, and remembering
+    // its id would stop it ever being fetched again.
+    this.skinId = null;
+    this.partIds.clear();
+    this.hatId = null;
+    this.backId = null;
+    this.hatSlot.clear();
+    this.backSlot.clear();
+
+    const material = this.ensureMaterial();
+    if (material) {
+      const map = ronaldoSkin(kit.slot, this.bloxityBody);
+      material.map = map;
+      // The late kits carry their own light.
+      material.emissiveMap = kit.glow > 0 ? map : null;
+      material.emissive.set(kit.glow > 0 ? 0xffffff : 0x000000);
+      material.emissiveIntensity = kit.glow;
+      material.needsUpdate = true;
+    }
+
+    for (const [part, mesh] of this.partMeshes) {
+      const geometry = this.defaultGeometry.get(part);
+      if (geometry) mesh.geometry = geometry;
+    }
+
+    this.hatSlot.visible = false;
+    this.backSlot.visible = false;
+    if (this.hair) setHairColor(this.hair, kit.hair);
+    this.hairHolder.visible = true;
+
+    this.proportionsKey = '';
+    this.applyProportions(DEFAULT_AVATAR_PROPORTIONS);
+    logger.info(SCOPE, `ronaldo tier ${kit.slot} worn`);
+  }
+
+  /** Back to the player's own avatar, exactly as it was recorded. */
+  private takeOffOutfit(): void {
+    this.hairHolder.visible = false;
+    this.hatSlot.visible = true;
+    this.backSlot.visible = true;
+    if (this.material) {
+      this.material.map = this.ownBaseMap;
+      this.material.emissiveMap = null;
+      this.material.emissive.set(BLACK);
+      this.material.emissiveIntensity = 0;
+      this.material.needsUpdate = true;
+    }
+    this.proportionsKey = '';
+    this.showLook(this.playerLook ?? parseAvatarLook(''));
+  }
+
+  /**
+   * This character's own material, creating it on the FBX fallback the first
+   * time an outfit needs one - that body otherwise shares the loader's ONE
+   * material, and painting a Ronaldo onto it would paint every player.
+   */
+  private ensureMaterial(): MeshStandardMaterial | null {
+    if (!this.material) this.ownMaterial(null);
+    return this.material;
+  }
+
+  /** Seat the (hidden) hair cap on the head while the rig is at bind pose. */
+  private attachHair(): void {
+    const neck = this.character.rig.getBone('Neck1');
+    if (!neck) return;
+    const height = playerModelLoader.getReport()?.heightWorldUnits ?? 3.2;
+    seatOnHead(this.hairHolder, this.character.modelRoot, neck, height);
+    this.hair = createHair(ronaldoKit(1).hair);
+    this.hairHolder.add(this.hair);
+    this.hairHolder.visible = false;
   }
 
   // --- setup ------------------------------------------------------------
@@ -160,11 +305,16 @@ export class AvatarAppearance {
     });
   }
 
-  /** Give this character a material of its own, starting on `skin`. */
+  /**
+   * Give this character a material of its own, starting on `skin`.
+   *
+   * The BODY only - its skinned meshes. Accessories and Ronaldo's hair hang
+   * inside the model too, carry their own materials, and must keep them.
+   */
   private ownMaterial(skin: Texture | null): void {
     let material: MeshStandardMaterial | null = null;
     this.character.modelRoot.traverse((child) => {
-      if (!(child instanceof Mesh)) return;
+      if (!(child instanceof SkinnedMesh)) return;
       const shared = child.material;
       if (Array.isArray(shared) || !(shared instanceof MeshStandardMaterial)) return;
       material ??= shared.clone();
@@ -174,6 +324,7 @@ export class AvatarAppearance {
     const owned = material as MeshStandardMaterial | null;
     this.material = owned;
     if (owned && skin) owned.map = skin;
+    this.ownBaseMap = owned?.map ?? null;
   }
 
   /**

@@ -129,34 +129,88 @@ export const LANDING = {
   bobY: -0.22,
 } as const;
 
-export const BACKFLIP_ANIM = {
+/**
+ * The Siuuu: what a backflip LOOKS like in this game.
+ *
+ * The backflip itself - its lift, its forward push, chaining, capacity - is
+ * gameplay and is untouched; this is only its picture. Where the character
+ * used to tumble backward it now leaps into Ronaldo's celebration: a spin
+ * about its own vertical axis with the arms flung wide, snapping into the
+ * "SIU!" stance - legs apart, arms driven down and out, chest up - as the
+ * turn completes. It holds that stance on the way down and lands in it.
+ *
+ * Each flip is one full turn, so the character always comes out of it facing
+ * where it is running, and a chain is a series of spins, each punctuated by
+ * the stance.
+ */
+export const SIUUU_ANIM = {
   /**
-   * Seconds for one full 360 degree rotation.
+   * Seconds for one celebration - one full turn plus the snap into the stance.
    *
-   * Must stay comfortably below the airtime of a standing jump
-   * (2 * MOVEMENT.jumpVelocity / MOVEMENT.gravity = 0.73s) or a single flip
-   * gets cut short by the landing. At 0.45s one flip completes with margin,
-   * and longer drops chain several.
+   * The same budget a flip had: it must stay comfortably below the airtime of
+   * a standing jump (2 * MOVEMENT.jumpVelocity / MOVEMENT.gravity = 0.73s) or
+   * a single one gets cut short by the landing. Chains still play one per
+   * flip, back to back.
    */
   rotationDuration: 0.45,
-  /** Seconds to ease the pivot back to upright if a flip is cut short. */
+  /** Fraction of each celebration spent spinning; the rest is the stance. */
+  spinPortion: 0.62,
+  /** Seconds to ease the spin back to facing forward if it is cut short. */
   abortDuration: 0.14,
-  /** How hard the character tucks at the middle of the rotation. */
-  tuckPose: {
-    Spine1: { x: deg(34) },
-    Spine2: { x: deg(20) },
-    Neck1: { x: deg(-16) },
-    LegL1: { x: deg(-84) },
-    LegR1: { x: deg(-84) },
-    LegL2: { x: deg(112) },
-    LegR2: { x: deg(112) },
-    ArmL1: { x: deg(46), z: deg(-26) },
-    ArmR1: { x: deg(46), z: deg(26) },
-    ArmL2: { x: deg(78) },
-    ArmR2: { x: deg(78) },
+  /** Mid-spin: arms flung out wide, legs gathered under. */
+  spinPose: {
+    Spine1: { x: deg(-4) },
+    Neck1: { x: deg(-6) },
+    ArmL1: { x: deg(4), z: deg(100) },
+    ArmR1: { x: deg(4), z: deg(-100) },
+    LegL1: { x: deg(-26), z: deg(4) },
+    LegR1: { x: deg(-18), z: deg(-4) },
+    LegL2: { x: deg(48) },
+    LegR2: { x: deg(40) },
   } satisfies PoseDefinition,
-  /** Slight asymmetry so the flip does not look mechanically perfect. */
-  tuckAsymmetry: deg(6),
+  /**
+   * "SIU!" - legs apart, arms driven down and out behind, chest and chin up.
+   *
+   * Roll (z) turns about the character's FORWARD axis, so on the left limbs -
+   * which sit at +X - a POSITIVE roll swings the limb outward, and on the
+   * right limbs a negative one does.
+   */
+  stancePose: {
+    Spine1: { x: deg(-12) },
+    Spine2: { x: deg(-8) },
+    Neck1: { x: deg(-16) },
+    ArmL1: { x: deg(22), z: deg(40) },
+    ArmR1: { x: deg(22), z: deg(-40) },
+    ArmL2: { x: deg(4) },
+    ArmR2: { x: deg(4) },
+    LegL1: { x: deg(-8), z: deg(22) },
+    LegR1: { x: deg(-8), z: deg(-22) },
+    LegL2: { x: deg(14) },
+    LegR2: { x: deg(14) },
+  } satisfies PoseDefinition,
+  /**
+   * How much of the stance is held while falling after a celebration, over
+   * the ordinary airborne pose - enough to read, not so much it looks frozen.
+   */
+  fallHold: 0.8,
+  /** The landing after a celebration: the stance, sunk into the knees. */
+  landing: {
+    duration: 0.42,
+    pose: {
+      Spine1: { x: deg(-6) },
+      Spine2: { x: deg(-8) },
+      Neck1: { x: deg(-20) },
+      ArmL1: { x: deg(28), z: deg(44) },
+      ArmR1: { x: deg(28), z: deg(-44) },
+      ArmL2: { x: deg(2) },
+      ArmR2: { x: deg(2) },
+      LegL1: { x: deg(-30), z: deg(26) },
+      LegR1: { x: deg(-30), z: deg(-26) },
+      LegL2: { x: deg(52) },
+      LegR2: { x: deg(52) },
+    } satisfies PoseDefinition,
+    bobY: -0.26,
+  },
 } as const;
 
 /**

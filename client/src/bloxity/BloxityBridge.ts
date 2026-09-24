@@ -1,5 +1,5 @@
 import { logger } from '../util/logger.js';
-import { AvatarAppearance } from './AvatarAppearance.js';
+import type { PlayerCharacter } from '../player/PlayerCharacter.js';
 import { encodeAvatarLook, parseAvatarLook, type AvatarLook } from '@obby/shared';
 import { bloxity, visibleName } from './BloxitySdk.js';
 import { BloxityPanel, type RoomPlayer } from './BloxityPanel.js';
@@ -37,7 +37,7 @@ export interface BloxityHost {
   /** Ask the game to put the player back at spawn. */
   respawn(): void;
   /** The local character, once it exists, for the avatar layer to dress. */
-  getCharacterForAvatar(): ConstructorParameters<typeof AvatarAppearance>[0] | null;
+  getCharacterForAvatar(): PlayerCharacter | null;
   /**
    * The portal took the pointer for its own menu (false) or handed it back
    * (true). The game's pointer-lock owner decides what that means for it.
@@ -77,7 +77,6 @@ export class BloxityBridge {
   private readonly chat: ChatFeed;
   private readonly subscriptions: Unsubscribe[] = [];
 
-  private avatar: AvatarAppearance | null = null;
   /** The equipment the SDK last announced through `onAvatarChanged`. */
   private equipped: LegionEquipped | null = null;
   private chatEnabled = true;
@@ -194,8 +193,6 @@ export class BloxityBridge {
   dispose(): void {
     for (const unsubscribe of this.subscriptions) unsubscribe();
     this.subscriptions.length = 0;
-    this.avatar?.dispose();
-    this.avatar = null;
     this.panel.dispose();
     this.chat.dispose();
     bloxity.gameplayEnd();
@@ -390,8 +387,9 @@ export class BloxityBridge {
     this.host.updateIdentity(this.playerName, this.playerUserId, this.playerPfp);
     const character = this.host.getCharacterForAvatar();
     if (!character) return;
-    this.avatar ??= new AvatarAppearance(character);
-    this.avatar.applyLook(look);
+    // The character's own appearance layer: while a Ronaldo is worn it only
+    // records the look, which is what every other client does with it too.
+    character.appearance.applyLook(look);
   }
 }
 

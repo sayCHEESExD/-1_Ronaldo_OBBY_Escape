@@ -3,12 +3,12 @@ import { logger } from '../util/logger.js';
 import { BootShop } from './BootShop.js';
 import { WorldCollision } from '@obby/shared';
 import { GorgeTerrain } from './GorgeTerrain.js';
-import { disposeJapaneseArt } from './JapaneseArt.js';
-import { disposeProps } from './JapaneseProps.js';
+import { disposeWorldArt } from './WorldArt.js';
+import { disposeProps } from './WorldProps.js';
 import { Leaderboards } from './Leaderboards.js';
 import { Redlines } from './Redlines.js';
 import { RouteDecor } from './RouteDecor.js';
-import { disposeTrees } from './SakuraTrees.js';
+import { disposeTrees } from './Trees.js';
 import { SkyAtmosphere, type AtmosphereLights } from './SkyAtmosphere.js';
 import { SpawnArea } from './SpawnArea.js';
 import { SpawnDecor } from './SpawnDecor.js';
@@ -27,7 +27,8 @@ const SCOPE = 'GorgeWorld';
  * Assembles the visual pieces and exposes the single `collision` object that
  * gameplay queries. Everything is built from the shared gorge config, so the
  * geometry the player collides with cannot drift from what is rendered - and
- * none of the anime scenery (shrines, trees, sky) is collision at all.
+ * none of the stadium scenery (stands, floodlights, trees, sky) is collision
+ * at all.
  */
 export class GorgeWorld {
   readonly root = new Group();
@@ -66,6 +67,15 @@ export class GorgeWorld {
     this.root.add(this.spawnArea.root);
   }
 
+  /**
+   * Stand up everything built from the character body - the Ronaldo figures
+   * in the Win Shop and the statue at spawn. Call once the body has loaded.
+   */
+  populateFigures(): void {
+    this.bootShop.populateFigures();
+    this.spawnDecor.populateStatue();
+  }
+
   /** The route's sky, or null before the world is attached. */
   get sky(): SkyAtmosphere | null {
     return this.atmosphere;
@@ -83,8 +93,9 @@ export class GorgeWorld {
   }
 
   /**
-   * Every per-frame world animation: wind, river, lanterns, waterfalls, the
-   * shop and training machines, and the sky grading for where the camera is.
+   * Every per-frame world animation: wind, river, waterfalls, the shop's
+   * figures and the training machines, and the sky grading for where the
+   * camera is.
    * All of it is client-side presentation.
    */
   update(delta: number, camera: Vector3, focusZ: number): void {
@@ -113,7 +124,7 @@ export class GorgeWorld {
     this.textures.dispose();
     disposeProps();
     disposeTrees();
-    disposeJapaneseArt();
+    disposeWorldArt();
     disposeToonKit();
     this.root.removeFromParent();
   }

@@ -2,26 +2,26 @@ import { PlayerAnimationState } from '@obby/shared';
 import { Group, Quaternion, Vector3 } from 'three';
 import {
   AIRBORNE,
-  BACKFLIP_ANIM,
   FLIP_PIVOT_HEIGHT,
   IDLE,
   JUMP_START,
   LANDING,
   LOCOMOTION,
+  SIUUU_ANIM,
   TRANSITIONS,
 } from '../config/animationConfig.js';
 import type { AnimationInput } from './AnimationInput.js';
-import { BackflipAnimator } from './BackflipAnimator.js';
 import { LocomotionCycle } from './LocomotionCycle.js';
-import { PoseBuffer } from './PoseBuffer.js';
+import { PoseBuffer, type PoseDefinition } from './PoseBuffer.js';
 import type { PlayerRig } from './rig/PlayerRig.js';
+import { SiuuuAnimator } from './SiuuuAnimator.js';
 
 /**
- * Backflip axis: the character's local right axis. A NEGATIVE rotation about
- * it takes the head backward and the feet forward - a backflip, not a front
- * flip. Applied to the flip pivot only.
+ * Celebration axis: the character's own up axis. A backflip used to rotate
+ * the pivot about the RIGHT axis; the Siuuu spins it about UP instead, at the
+ * same hip-height pivot. Applied to the flip pivot only.
  */
-const FLIP_AXIS = new Vector3(1, 0, 0);
+const SPIN_AXIS = new Vector3(0, 1, 0);
 
 const clamp = (value: number, min: number, max: number): number =>
   value < min ? min : value > max ? max : value;
@@ -50,7 +50,10 @@ export class PlayerAnimator {
   private readonly visual: Group;
 
   private readonly locomotion = new LocomotionCycle();
-  private readonly backflip = new BackflipAnimator();
+  /** Plays a Siuuu for every backflip - the flip's picture, not its physics. */
+  private readonly backflip = new SiuuuAnimator();
+  /** Scratch buffer the celebration poses are written into before blending. */
+  private readonly celebrationPose = new PoseBuffer();
 
   /** Pose the active state wants this frame. */
   private readonly targetPose = new PoseBuffer();
@@ -68,6 +71,11 @@ export class PlayerAnimator {
 
   private idleTime = 0;
   private wasGrounded = true;
+  /** A Siuuu has played since leaving the ground - fall and land in it. */
+  private celebrated = false;
+  /** Whether the landing now playing is the Siuuu landing. */
+  private celebrationLanding = false;
+  private landingDuration: number = LANDING.duration;
 
   constructor(rig: PlayerRig, flipPivot: Group, visual: Group) {
     this.rig = rig;
@@ -96,6 +104,8 @@ export class PlayerAnimator {
   /** Clear all animation state, e.g. after a server respawn. */
   reset(): void {
     this.backflip.reset();
+    this.celebrated = false;
+    this.celebrationLanding = false;
     this.setState(PlayerAnimationState.Idle, 0);
     this.targetPose.reset();
     this.fromPose.reset();
@@ -126,6 +136,10 @@ export class PlayerAnimator {
     // than snapping - the character must never be left tilted on the ground.
     if (input.landed || (input.grounded && !this.wasGrounded)) {
       if (this.backflip.isFlipping) this.backflip.abort();
+      // Touching down after a celebration lands IN it.
+      this.celebrationLanding = this.celebrated;
+      this.celebrated = false;
+      this.landingDuration = this.celebrationLanding ? SIUUU_ANIM.landing.duration : LANDING.duration;
       this.setState(PlayerAnimationState.Landing, TRANSITIONS.toLanding);
       this.wasGrounded = true;
       return;
@@ -134,6 +148,7 @@ export class PlayerAnimator {
 
     if (input.backflipRequested) {
       this.backflip.request();
+      this.celebrated = true;
       this.setState(this.backflipState(), TRANSITIONS.toBackflip);
       return;
     }
@@ -170,7 +185,7 @@ export class PlayerAnimator {
     // Grounded: hold the landing pose briefly, then recover into locomotion.
     if (
       this.state === PlayerAnimationState.Landing &&
-      this.stateTime < LANDING.duration
+      this.stateTime < this.landingDuration
     ) {
       return;
     }
@@ -226,6 +241,8 @@ export class PlayerAnimator {
 
       case PlayerAnimationState.Airborne:
         this.writeAirbornePose(input.verticalVelocity);
+        // Still in the stance from the last celebration, on the way down.
+        if (this.celebrated) this.blendTowards(SIUUU_ANIM.stancePose, SIUUU_ANIM.fallHold);
         break;
 
       case PlayerAnimationState.Landing:
@@ -263,6 +280,15 @@ export class PlayerAnimator {
   }
 
   private writeLandingPose(): void {
+    if (this.celebrationLanding) {
+      // The Siuuu landing: held wide and low, then released into the run.
+      const landing = SIUUU_ANIM.landing;
+      const t = clamp(this.stateTime / landing.duration, 0, 1);
+      const depth = 1 - ease(clamp((t - 0.55) / 0.45, 0, 1));
+      this.targetPose.applyDefinition(landing.pose, depth);
+      this.targetPose.bobY = landing.bobY * depth;
+      return;
+    }
     // Deepest at touchdown, recovering over the landing window.
     const t = clamp(this.stateTime / LANDING.duration, 0, 1);
     const depth = 1 - ease(t);
@@ -271,20 +297,21 @@ export class PlayerAnimator {
   }
 
   private writeBackflipPose(verticalVelocity: number): void {
-    const tuck = this.backflip.tuckAmount;
-
-    // Underneath the tuck is the airborne pose, so a flip that finishes early
-    // or is cut short reads as a continuation of the jump rather than a cut.
+    // Underneath the celebration is the airborne pose, so one that finishes
+    // early or is cut short reads as a continuation of the jump, not a cut.
+    // The poses are BLENDED TOWARD rather than added on: the spin flings the
+    // arms wide from wherever the jump had them, it does not stack on top.
     this.writeAirbornePose(verticalVelocity);
-    this.targetPose.blendInDefinition(BACKFLIP_ANIM.tuckPose, tuck);
-
-    // A touch of asymmetry keeps the tuck from looking mechanical.
-    const asymmetry = BACKFLIP_ANIM.tuckAsymmetry * tuck;
-    this.targetPose.add('LegL1', asymmetry);
-    this.targetPose.add('LegR1', -asymmetry);
-    this.targetPose.add('ArmL2', asymmetry);
-    this.targetPose.add('ArmR2', -asymmetry);
+    this.blendTowards(SIUUU_ANIM.stancePose, this.backflip.stanceAmount);
+    this.blendTowards(SIUUU_ANIM.spinPose, this.backflip.spinAmount);
     this.targetPose.bobY = 0;
+  }
+
+  /** targetPose = lerp(targetPose, definition, weight). Allocates nothing. */
+  private blendTowards(definition: PoseDefinition, weight: number): void {
+    if (weight <= 0) return;
+    this.celebrationPose.applyDefinition(definition);
+    this.targetPose.lerpBetween(this.targetPose, this.celebrationPose, Math.min(1, weight));
   }
 
   // ---------------------------------------------------------------- apply
@@ -301,8 +328,8 @@ export class PlayerAnimator {
 
     this.rig.applyPose(this.outputPose);
 
-    // Rebuilt from a scalar every frame - see BackflipAnimator on drift.
-    this.flipPivot.quaternion.setFromAxisAngle(FLIP_AXIS, -this.backflip.rotationAngle);
+    // Rebuilt from a scalar every frame - see SiuuuAnimator on drift.
+    this.flipPivot.quaternion.setFromAxisAngle(SPIN_AXIS, this.backflip.rotationAngle);
 
     // Bob is purely visual: it moves the model inside the pivot, never the
     // character root that carries the physics position.

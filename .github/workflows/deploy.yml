@@ -52,20 +52,23 @@ env:
   # This game carries three names on purpose, and they are keyed by different
   # systems - do not collapse them:
   #
-  #   "+1 Anime Backflip Escape"  human-facing game name
-  #   speed-backflip-escape       Bloxity hosting game id - this value
-  #   anime-backflip-escape       Bloxity game slug (bloxity.io/g/<slug>) -
+  #   "+1 Ronaldo Obby Escape"    human-facing game name
+  #   ronaldo-obby-escape         Bloxity hosting game id - this value
+  #   ronaldo-obby-escape         Bloxity game slug (bloxity.io/g/<slug>) -
   #                               shared/src/config/bloxity.ts. The SDK is
   #                               initialised with it and the SERVER verifies
   #                               login tokens against it; any other value
   #                               rejects every signed-in player as a guest.
-  BLOXITY_GAME_ID: speed-backflip-escape
+  #                               Spelled like the hosting id here, but it is
+  #                               a separate registration - keep both in step
+  #                               with what the portal actually has.
+  BLOXITY_GAME_ID: ronaldo-obby-escape
 
-  # The repository is named "-1_Backflip_OBBY_escape", and a Docker reference
-  # may neither begin with a dash nor contain uppercase - so the image is named
-  # explicitly rather than derived from the repo. The shape still matches what
-  # the docs expect: ghcr.io/<owner>/<game>-server.
-  IMAGE_NAME: ghcr.io/saycheesexd/speed-backflip-escape-server
+  # A repository named like "-1_Ronaldo_Obby_Escape" cannot be a Docker
+  # reference - one may neither begin with a dash nor contain uppercase - so
+  # the image is named explicitly rather than derived from the repo. The shape
+  # still matches what the docs expect: ghcr.io/<owner>/<game>-server.
+  IMAGE_NAME: ghcr.io/saycheesexd/ronaldo-obby-escape-server
 
   # The room's player cap, and the same number as MAX_CLIENTS in
   # server/src/rooms/GorgeRoom.ts. Legion fills a pod to seatCap and then
@@ -238,7 +241,7 @@ jobs:
           # the DEV backend and the bare host is PROD. Getting this backwards
           # points dev players at the production server, which is invisible
           # until somebody notices their test progress on the live leaderboard.
-          VITE_SERVER_URL: ${{ needs.channel.outputs.name == 'prod' && (vars.SERVER_URL_PROD || 'wss://speed-backflip-escape.host.bloxity.io') || (vars.SERVER_URL_DEV || 'wss://speed-backflip-escape.dev.host.bloxity.io') }}
+          VITE_SERVER_URL: ${{ needs.channel.outputs.name == 'prod' && (vars.SERVER_URL_PROD || 'wss://ronaldo-obby-escape.host.bloxity.io') || (vars.SERVER_URL_DEV || 'wss://ronaldo-obby-escape.dev.host.bloxity.io') }}
         run: |
           set -euo pipefail
           echo "channel=${{ needs.channel.outputs.name }}"
@@ -249,8 +252,8 @@ jobs:
           # shared/src/config/bloxity.ts and is NOT the hosting game id.
           # Asserted here because the two are easy to confuse and a wrong slug
           # silently breaks login, friends and Bux while the game still runs.
-          grep -rqF 'anime-backflip-escape' client/dist/assets \
-            || { echo "::error::SDK gameSlug anime-backflip-escape is missing from the bundle."; exit 1; }
+          grep -rqF 'ronaldo-obby-escape' client/dist/assets \
+            || { echo "::error::SDK gameSlug ronaldo-obby-escape is missing from the bundle."; exit 1; }
           echo "SDK gameSlug confirmed in the bundle."
 
       - name: Check the build against the 12 MB budget

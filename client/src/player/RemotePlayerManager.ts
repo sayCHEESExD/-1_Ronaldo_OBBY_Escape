@@ -1,6 +1,5 @@
 import { parseAvatarLook } from '@obby/shared';
 import type { Scene } from 'three';
-import { AvatarAppearance } from '../bloxity/AvatarAppearance.js';
 import type { NetPlayerState } from '../net/netTypes.js';
 import { logger } from '../util/logger.js';
 import { RemotePlayer } from './RemotePlayer.js';
@@ -15,11 +14,12 @@ export class RemotePlayerManager {
   private readonly scene: Scene;
   private readonly players = new Map<string, RemotePlayer>();
   /**
-   * Each remote player's Bloxity look, and the layer that dresses them in it.
-   * The same `AvatarAppearance` the local player uses, fed from replicated
-   * state instead of the SDK - so every client dresses a given player alike.
+   * Each remote player's encoded Bloxity look, as last applied. Their
+   * character's own `AvatarAppearance` - the same layer the local player
+   * uses - is fed from replicated state instead of the SDK, so every client
+   * dresses a given player alike.
    */
-  private readonly avatars = new Map<string, { appearance: AvatarAppearance; look: string }>();
+  private readonly looks = new Map<string, string>();
 
   private localSessionId: string | null = null;
 
@@ -49,6 +49,7 @@ export class RemotePlayerManager {
     // trail must stay where it was laid down.
     this.scene.add(player.character.worldRoot);
     player.character.setCosmetics(state.trailSlot, state.auraSlot);
+    player.character.setOutfit(state.bootSlot);
     // Named from replicated state, so every client sees the same name over the
     // same player - and a player with no Bloxity name gets no plate at all.
     player.character.setDisplayName(state.legionName ?? '');
@@ -72,7 +73,9 @@ export class RemotePlayerManager {
     // Cosmetics come from replicated state, so every client sees the same
     // trail and aura on a given player.
     player.character.setCosmetics(state.trailSlot, state.auraSlot);
-    player.character.boots.setSlot(state.bootSlot);
+    // The Ronaldo they have equipped - replicated as `bootSlot`, so everyone
+    // sees the same player become the same Ronaldo.
+    player.character.setOutfit(state.bootSlot);
     // Re-applied on every patch so a player who logs in mid-session stops
     // being their guest name on everyone else's screen. `setDisplayName`
     // returns early when it has not changed, so this costs nothing per patch.
@@ -89,21 +92,15 @@ export class RemotePlayerManager {
    */
   private applyLook(sessionId: string, player: RemotePlayer, encoded: string | undefined): void {
     const look = encoded ?? '';
-    let entry = this.avatars.get(sessionId);
-    if (entry && entry.look === look) return;
-    if (!entry) {
-      entry = { appearance: new AvatarAppearance(player.character), look };
-      this.avatars.set(sessionId, entry);
-    }
-    entry.look = look;
-    entry.appearance.applyLook(parseAvatarLook(look));
+    if (this.looks.get(sessionId) === look) return;
+    this.looks.set(sessionId, look);
+    player.character.appearance.applyLook(parseAvatarLook(look));
   }
 
   remove(sessionId: string): void {
     const player = this.players.get(sessionId);
     if (!player) return;
-    this.avatars.get(sessionId)?.appearance.dispose();
-    this.avatars.delete(sessionId);
+    this.looks.delete(sessionId);
     player.dispose();
     this.players.delete(sessionId);
     logger.info(SCOPE, `remote player removed: ${sessionId} (total ${this.players.size})`);
@@ -127,8 +124,7 @@ export class RemotePlayerManager {
   }
 
   dispose(): void {
-    for (const entry of this.avatars.values()) entry.appearance.dispose();
-    this.avatars.clear();
+    this.looks.clear();
     for (const player of this.players.values()) player.dispose();
     this.players.clear();
   }

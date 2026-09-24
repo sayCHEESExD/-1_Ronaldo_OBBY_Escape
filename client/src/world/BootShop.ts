@@ -18,12 +18,13 @@ import {
   MeshLambertMaterial,
   PlaneGeometry,
   SRGBColorSpace,
-  type BufferGeometry,
   type Material,
 } from 'three';
-import { loadIconImage } from '../config/uiIcons.js';
+import type { PoseDefinition } from '../animation/PoseBuffer.js';
+import { SIUUU_ANIM } from '../config/animationConfig.js';
+import { ronaldoKit } from '../config/ronaldoKits.js';
 import { WORLD_COLORS } from '../config/worldVisuals.js';
-import { createSneakerGeometry } from '../rendering/SneakerGeometry.js';
+import { createRonaldoFigure, type RonaldoFigure } from '../player/ronaldo/RonaldoFigure.js';
 import {
   SIGN_FRAME_MARGIN,
   SIGN_GLOW_STANDOFF,
@@ -31,16 +32,58 @@ import {
   createSignGlow,
   drawSign,
 } from './SignPanel.js';
+import { DISPLAY_FONT } from './WorldArt.js';
 
 /** Sign canvas. The mesh is sized to this aspect so the text is not stretched. */
 const SIGN_WIDTH = 1024;
 const SIGN_HEIGHT = 220;
 
 /** Structure, matched to the treadmill bay's kerb and the spawn wall coping. */
-const SHOP_STRUCTURE_COLOR = 0x4a5872;
-const SHOP_COPING_COLOR = 0x8fb7d9;
+const SHOP_STRUCTURE_COLOR = 0x2c3a5a;
+const SHOP_COPING_COLOR = 0xf4f6fb;
 const SHOP_WALL_HEIGHT = 8;
 const SHOP_WALL_THICKNESS = 1.6;
+
+/** Pedestal label canvas and the plane it is drawn on. */
+const LABEL_CANVAS = { width: 384, height: 240 } as const;
+/** Narrower than the pedestal spacing, so neighbouring names never touch. */
+const LABEL_SIZE = { width: 4.6, height: 2.875 } as const;
+/** Label centre above the platform - clear of a figure's head. */
+const LABEL_Y = 5.45;
+
+/**
+ * Figures stand at the BACK of their pad, towards the wall, so a player can
+ * step onto the front of it - where the purchase happens - without standing
+ * inside the model.
+ */
+const FIGURE_SETBACK = 0.8;
+/** Pad top, which is where a figure's feet go. */
+const PAD_TOP = 0.4;
+
+/** Pad colours: waiting, affordable (the invitation), owned, and equipped. */
+const PAD_IDLE = 0xc8281e;
+const PAD_AFFORDABLE = 0x22d3ee;
+const PAD_OWNED = 0x3a4766;
+const PAD_EQUIPPED = 0xf2c14e;
+
+/**
+ * A relaxed free-kick stance: feet planted wide, arms loose, chest up - the
+ * moment before the run-up. Alternates along the row with the SIU stance so
+ * the line of figures reads as a gallery rather than one model stamped nine
+ * times.
+ */
+const FREE_KICK_STANCE: PoseDefinition = {
+  Spine1: { x: -0.1 },
+  Neck1: { x: -0.06 },
+  ArmL1: { x: 0.08, z: 0.3 },
+  ArmR1: { x: 0.08, z: -0.3 },
+  ArmL2: { x: 0.18 },
+  ArmR2: { x: 0.18 },
+  LegL1: { z: 0.26 },
+  LegR1: { z: -0.26 },
+  LegL2: { x: 0.06 },
+  LegR2: { x: 0.06 },
+};
 
 /** One pedestal's label, kept so it can be redrawn as Wins change. */
 interface PedestalLabel {
@@ -49,31 +92,38 @@ interface PedestalLabel {
   readonly canvas: HTMLCanvasElement;
 }
 
+/** One pedestal: its pad, the node its figure stands on, and the figure. */
+interface Pedestal {
+  readonly tier: BootTier;
+  readonly padMaterial: MeshLambertMaterial;
+  readonly stand: Group;
+  figure: RonaldoFigure | null;
+}
+
 /**
- * The Win Shop: a row of sneaker pedestals along the right-hand side of the
- * starting platform, with a lit sign behind them.
+ * The Win Shop: a row of Ronaldo figures on pedestals along the right-hand
+ * side of the starting area, one per tier, with a lit sign behind them.
+ *
+ * Each figure is the very character a player becomes by buying that tier -
+ * the same body, painted atlas and hair. A player walks onto the pedestal
+ * holding enough Wins, the server takes the Wins, and they are that Ronaldo.
  *
  * Display only. What is owned and equipped is decided by the server; this
- * redraws the labels and highlights to match.
+ * redraws the labels and pad highlights to match. The figures need the
+ * character body, which loads after the world is built, so they arrive
+ * through `populateFigures`.
  */
 export class BootShop {
   readonly root = new Group();
 
-  private readonly geometries: BoxGeometry[] = [];
-  private readonly planes: PlaneGeometry[] = [];
+  private readonly geometries: (BoxGeometry | PlaneGeometry)[] = [];
   private readonly materials: Material[] = [];
   private readonly labels: PedestalLabel[] = [];
-  /** Holder per slot, carrying the sneaker's upper and sole. */
-  private readonly bootNodes = new Map<number, Group>();
-  private readonly bootMaterials = new Map<number, MeshLambertMaterial>();
+  private readonly pedestals: Pedestal[] = [];
 
-  private sneakerUpper: BufferGeometry | null = null;
-  private sneakerSole: BufferGeometry | null = null;
   private signTexture: CanvasTexture | null = null;
   private glowTexture: CanvasTexture | null = null;
-  /** Set by dispose(), so a late image load cannot touch a freed texture. */
-  private disposed = false;
-  private spinTime = 0;
+  private time = 0;
 
   private lastWins = -1;
   private lastOwned = -1;
@@ -85,15 +135,31 @@ export class BootShop {
     this.buildPedestals();
   }
 
-  /** Slowly turn the display sneakers so they read as items, not scenery. */
+  /**
+   * Stand a Ronaldo on every pedestal. Call once the player model has loaded -
+   * each figure is cloned from the same body every character uses.
+   */
+  populateFigures(): void {
+    this.pedestals.forEach((pedestal, index) => {
+      if (pedestal.figure) return;
+      const figure = createRonaldoFigure(pedestal.tier.slot);
+      figure.pose(index % 2 === 0 ? SIUUU_ANIM.stancePose : FREE_KICK_STANCE);
+      pedestal.stand.add(figure.root);
+      pedestal.figure = figure;
+    });
+  }
+
+  /** Let the figures turn a touch, so they read as characters, not statues. */
   update(delta: number): void {
-    this.spinTime += delta;
-    for (const node of this.bootNodes.values()) {
-      node.rotation.y = Math.sin(this.spinTime * 0.5 + node.position.z) * 0.55;
+    this.time += delta;
+    for (const pedestal of this.pedestals) {
+      const figure = pedestal.figure;
+      if (!figure) continue;
+      figure.root.rotation.y = Math.sin(this.time * 0.6 + pedestal.tier.slot) * 0.22;
     }
   }
 
-  /** Redraw for the player's Wins, owned boots and equipped slot. */
+  /** Redraw for the player's Wins, owned tiers and equipped slot. */
   setState(wins: number, ownedMask: number, equippedSlot: number): void {
     if (
       wins === this.lastWins &&
@@ -109,49 +175,45 @@ export class BootShop {
     for (const label of this.labels) {
       drawPedestalLabel(label.canvas, label.tier, wins, ownedMask, equippedSlot);
       label.texture.needsUpdate = true;
+    }
 
-      const node = this.bootNodes.get(label.tier.slot);
-      const material = this.bootMaterials.get(label.tier.slot);
-      if (!node || !material) continue;
+    for (const pedestal of this.pedestals) {
+      const { tier, padMaterial } = pedestal;
+      const owned = isBootOwned(ownedMask, tier.slot);
+      const affordable = canAffordBoot(tier, wins);
+      const equipped = equippedSlot === tier.slot;
 
-      const owned = isBootOwned(ownedMask, label.tier.slot);
-      const affordable = canAffordBoot(label.tier, wins);
-
-      // Owned boots sit proud in full colour; affordable ones glow to invite a
-      // purchase; the rest stay dark and low.
-      node.position.y = SPAWN_PLATFORM.topY + (owned || affordable ? 1.15 : 0.85);
-      material.color.set(owned || affordable ? label.tier.color : 0x39414d);
-      material.emissive.set(
-        affordable && !owned ? new Color(label.tier.color) : new Color(0x000000),
-      );
-      material.emissiveIntensity = affordable && !owned ? 0.5 : 0;
+      // The pad says what walking onto it would do: gold for the Ronaldo you
+      // are, cyan and glowing for one you can become right now, slate for one
+      // already bought, red for one still out of reach.
+      const color = equipped
+        ? PAD_EQUIPPED
+        : owned
+          ? PAD_OWNED
+          : affordable
+            ? PAD_AFFORDABLE
+            : PAD_IDLE;
+      padMaterial.color.setHex(color);
+      const glowing = equipped || (affordable && !owned);
+      padMaterial.emissive.set(glowing ? new Color(color) : new Color(0x000000));
+      padMaterial.emissiveIntensity = glowing ? 0.45 : 0;
     }
   }
 
   dispose(): void {
-    this.disposed = true;
+    for (const pedestal of this.pedestals) pedestal.figure?.dispose();
     for (const geometry of this.geometries) geometry.dispose();
-    for (const plane of this.planes) plane.dispose();
     for (const material of this.materials) material.dispose();
     for (const label of this.labels) label.texture.dispose();
     this.signTexture?.dispose();
     this.glowTexture?.dispose();
-    this.sneakerUpper?.dispose();
-    this.sneakerSole?.dispose();
   }
 
   /**
-   * Dark backing wall. It also closes the RIGHT side of the starting area -
-   * the left and back are walled separately in SpawnArea.
-   */
-  /**
-   * The shop's structure, in the same language as the treadmill bay.
-   *
-   * Was a 15-unit black slab running the whole platform: it read as an
-   * unfinished wall and it ran straight through the gorge-mouth wall at the
-   * front. Now it is a wall the height of the spawn walls, in the bay kerb
-   * colour, capped with the same coping course and ended with the same posts -
-   * and it stops at the pedestal row instead of crossing the whole start.
+   * The shop's structure, in the same language as the treadmill bay: a wall
+   * the height of the spawn walls, capped with the same coping course and
+   * ended with the same posts. It also closes the RIGHT side of the starting
+   * area - the left and back are walled separately in SpawnArea.
    */
   private buildBackdrop(): void {
     const rowLength = (BOOT_TIERS.length - 1) * BOOT_SHOP.spacingZ;
@@ -210,13 +272,7 @@ export class BootShop {
     }
   }
 
-  /**
-   * The "Win Shop" sign, in the same treatment as the Train Speed banner.
-   *
-   * Was a flat green slab with text floating in front of it; it now shares the
-   * house sign panel and the same dark frame, so the two signs read as part of
-   * one place rather than two unrelated props.
-   */
+  /** The "Win Shop" sign, in the same treatment as the Train Speed banner. */
   private buildSign(): void {
     const rowLength = (BOOT_TIERS.length - 1) * BOOT_SHOP.spacingZ;
     const centerZ = BOOT_SHOP.firstZ + rowLength / 2;
@@ -250,13 +306,12 @@ export class BootShop {
     // Face +X, into the walkable side, exactly like the panel below.
     glow.mesh.rotation.y = Math.PI / 2;
     this.root.add(glow.mesh);
-    this.planes.push(glow.geometry);
+    this.geometries.push(glow.geometry);
     this.materials.push(glow.material);
     this.glowTexture = glow.texture;
 
-    // 勝 - victory - in the seal; "Win Shop" stays the readable part.
     const texture = new CanvasTexture(
-      drawSign('Win Shop', { kanji: '勝', width: SIGN_WIDTH, height: SIGN_HEIGHT }),
+      drawSign('Win Shop', { seal: 'cup', width: SIGN_WIDTH, height: SIGN_HEIGHT }),
     );
     texture.colorSpace = SRGBColorSpace;
     // The sign never changes, so it is not registered for redraws - but its
@@ -264,7 +319,7 @@ export class BootShop {
     this.signTexture = texture;
 
     const panelGeometry = new PlaneGeometry(panelLength, panelHeight);
-    this.planes.push(panelGeometry);
+    this.geometries.push(panelGeometry);
 
     const panelMaterial = new MeshBasicMaterial({
       map: texture,
@@ -283,46 +338,27 @@ export class BootShop {
   }
 
   private buildPedestals(): void {
-    const padGeometry = new BoxGeometry(3.6, 0.4, 3.6);
-    const labelGeometry = new PlaneGeometry(6.4, 3.2);
-    this.geometries.push(padGeometry);
-    this.planes.push(labelGeometry);
+    const padGeometry = new BoxGeometry(3.6, PAD_TOP, 3.6);
+    const labelGeometry = new PlaneGeometry(LABEL_SIZE.width, LABEL_SIZE.height);
+    this.geometries.push(padGeometry, labelGeometry);
 
-    const padMaterial = new MeshLambertMaterial({ color: WORLD_COLORS.collectionPad });
-    this.materials.push(padMaterial);
+    BOOT_TIERS.forEach((tier) => {
+      const z = BOOT_SHOP.firstZ + (tier.slot - 1) * BOOT_SHOP.spacingZ;
 
-    // The same sneaker the player wears, shown larger on the stands.
-    const sneaker = createSneakerGeometry();
-    this.sneakerUpper = sneaker.upper;
-    this.sneakerSole = sneaker.sole;
-    const soleMaterial = new MeshLambertMaterial({ color: 0xf2f5f7 });
-    this.materials.push(soleMaterial);
-
-    BOOT_TIERS.forEach((tier, index) => {
-      const z = BOOT_SHOP.firstZ + index * BOOT_SHOP.spacingZ;
-
+      // Each pad its own material, so one can glow without lighting the row.
+      const padMaterial = new MeshLambertMaterial({ color: WORLD_COLORS.collectionPad });
+      this.materials.push(padMaterial);
       const pad = new Mesh(padGeometry, padMaterial);
-      pad.position.set(BOOT_SHOP.x, SPAWN_PLATFORM.topY + 0.2, z);
+      pad.position.set(BOOT_SHOP.x, SPAWN_PLATFORM.topY + PAD_TOP / 2, z);
       pad.receiveShadow = true;
       this.root.add(pad);
 
-      const bootMaterial = new MeshLambertMaterial({ color: tier.color });
-      this.materials.push(bootMaterial);
-
-      const holder = new Group();
-      holder.position.set(BOOT_SHOP.x, SPAWN_PLATFORM.topY + 1.15, z);
-      for (const [geometry, material] of [
-        [sneaker.upper, bootMaterial],
-        [sneaker.sole, soleMaterial],
-      ] as const) {
-        const mesh = new Mesh(geometry, material);
-        mesh.scale.set(1.9, 1.9, 2.6);
-        mesh.castShadow = true;
-        holder.add(mesh);
-      }
-      this.root.add(holder);
-      this.bootNodes.set(tier.slot, holder);
-      this.bootMaterials.set(tier.slot, bootMaterial);
+      // Where the figure will stand, facing +X - out into the plaza.
+      const stand = new Group();
+      stand.position.set(BOOT_SHOP.x - FIGURE_SETBACK, SPAWN_PLATFORM.topY + PAD_TOP, z);
+      stand.rotation.y = Math.PI / 2;
+      this.root.add(stand);
+      this.pedestals.push({ tier, padMaterial, stand, figure: null });
 
       const canvas = drawPedestalLabel(createLabelCanvas(), tier, 0, 1, 1);
       const texture = new CanvasTexture(canvas);
@@ -337,7 +373,7 @@ export class BootShop {
       this.materials.push(labelMaterial);
 
       const label = new Mesh(labelGeometry, labelMaterial);
-      label.position.set(BOOT_SHOP.x - 0.3, SPAWN_PLATFORM.topY + 4.4, z);
+      label.position.set(BOOT_SHOP.x - 0.3, SPAWN_PLATFORM.topY + LABEL_Y, z);
       label.rotation.y = Math.PI / 2;
       this.root.add(label);
 
@@ -348,8 +384,8 @@ export class BootShop {
 
 const createLabelCanvas = (): HTMLCanvasElement => {
   const canvas = document.createElement('canvas');
-  canvas.width = 384;
-  canvas.height = 192;
+  canvas.width = LABEL_CANVAS.width;
+  canvas.height = LABEL_CANVAS.height;
   return canvas;
 };
 
@@ -366,12 +402,15 @@ const outlined = (
   ctx.lineJoin = 'round';
   ctx.lineWidth = outline;
   ctx.strokeStyle = '#121b28';
-  ctx.strokeText(text, x, y);
+  ctx.strokeText(text, x, y, LABEL_CANVAS.width - 16);
   ctx.fillStyle = fill;
-  ctx.fillText(text, x, y);
+  ctx.fillText(text, x, y, LABEL_CANVAS.width - 16);
 };
 
-/** "+N/Step" over EQUIPPED / OWNED / a buy prompt / the Wins still required. */
+/**
+ * The Ronaldo's name and era, "+N/Step", then EQUIPPED / OWNED / a buy
+ * prompt / the Wins still required.
+ */
 const drawPedestalLabel = (
   canvas: HTMLCanvasElement,
   tier: BootTier,
@@ -387,43 +426,38 @@ const drawPedestalLabel = (
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
+  const kit = ronaldoKit(tier.slot);
+  outlined(ctx, tier.name, w / 2, 24, `900 30px ${DISPLAY_FONT}`, '#ffd84a', 8);
+  outlined(ctx, kit.era.toUpperCase(), w / 2, 56, `900 20px ${DISPLAY_FONT}`, '#c9d6ff', 6);
+
   const owned = isBootOwned(ownedMask, tier.slot);
-  outlined(
-    ctx,
-    `+${tier.speedPerStep}/Step`,
-    w / 2,
-    44,
-    'bold 54px system-ui, sans-serif',
-    '#ffffff',
-  );
+  outlined(ctx, `+${tier.speedPerStep}/Step`, w / 2, 104, `900 50px ${DISPLAY_FONT}`, '#ffffff');
 
   if (equippedSlot === tier.slot) {
-    outlined(ctx, 'EQUIPPED', w / 2, 120, 'bold 46px system-ui, sans-serif', '#5dff7a');
+    outlined(ctx, 'EQUIPPED', w / 2, 170, `900 42px ${DISPLAY_FONT}`, '#5dff7a');
   } else if (owned) {
-    outlined(ctx, 'OWNED', w / 2, 120, 'bold 46px system-ui, sans-serif', '#ffd75e');
+    outlined(ctx, 'OWNED', w / 2, 170, `900 42px ${DISPLAY_FONT}`, '#ffd75e');
   } else if (canAffordBoot(tier, wins)) {
     // Affordable but not bought - tell the player the price and to stand on it.
     outlined(
       ctx,
       `WALK OVER: ${formatSpeed(tier.winsRequired)}`,
       w / 2,
-      112,
-      'bold 34px system-ui, sans-serif',
+      162,
+      `900 32px ${DISPLAY_FONT}`,
       '#7dffa8',
     );
-    outlined(ctx, 'WINS', w / 2, 158, 'bold 36px system-ui, sans-serif', '#c8ffd9', 7);
+    outlined(ctx, 'WINS', w / 2, 204, `900 32px ${DISPLAY_FONT}`, '#c8ffd9', 7);
   } else {
     outlined(
       ctx,
       `${formatSpeed(tier.winsRequired)} Wins`,
       w / 2,
-      110,
-      'bold 40px system-ui, sans-serif',
+      160,
+      `900 38px ${DISPLAY_FONT}`,
       '#ff8f8f',
     );
-    outlined(ctx, 'To Buy', w / 2, 156, 'bold 32px system-ui, sans-serif', '#ffbcbc', 7);
+    outlined(ctx, 'Required', w / 2, 204, `900 30px ${DISPLAY_FONT}`, '#ffbcbc', 7);
   }
   return canvas;
 };
-
-/** The trophy + "Win Shop" sign face. */

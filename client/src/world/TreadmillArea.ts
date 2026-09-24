@@ -21,8 +21,8 @@ import {
   type Texture,
 } from 'three';
 import { WORLD_COLORS } from '../config/worldVisuals.js';
-import { tatami } from './JapaneseArt.js';
-import { MAT, bentBox, paperLantern } from './JapaneseProps.js';
+import { turf } from './WorldArt.js';
+import { MAT, hangingLamp } from './WorldProps.js';
 import { toon } from './ToonKit.js';
 import {
   SIGN_FRAME_MARGIN,
@@ -50,15 +50,16 @@ const BANNER_Y = 9.4;
  */
 const BANNER_STANDOFF = 0.6;
 
-/** Height of the red colonnade's lintel over the front of the row. */
+/** Height of the goalpost colonnade's crossbar over the front of the row. */
 const COLONNADE_TOP = 7.8;
 
 /**
- * The training hall the treadmills stand in - a dojo bay.
+ * The training ground the treadmills stand in.
  *
- * Purely structural: an inlaid tatami floor, a timber kerb framing it on three
- * sides, a red torii colonnade across the front with paper lanterns between
- * the pillars, and the 修行 "Train Speed" board over the row. The machines
+ * Purely structural: an inlaid training-turf floor, a concrete kerb framing it
+ * on three sides, a colonnade of white goalposts across the front with
+ * stadium lamps between them, and the "Train Speed" board over the row. The
+ * machines
  * themselves, their tiers, colours and effects are `Treadmills` and are not
  * touched here.
  *
@@ -100,14 +101,14 @@ export class TreadmillArea {
     this.floorTexture?.dispose();
   }
 
-  /** A tatami floor inlaid into the spawn grass. Top face at platform level. */
+  /** A training-turf floor inlaid into the spawn grass. Top face at platform level. */
   private buildFloor(x: number, z: number, width: number, depth: number): void {
     const thickness = 0.6;
     const geometry = new BoxGeometry(width, thickness, depth);
-    const map = tatami().clone();
+    const map = turf().clone();
     map.needsUpdate = true;
-    // One mat is 2.4 wide by 4.8 long.
-    map.repeat.set(width / 2.4, depth / 4.8);
+    // One lane of turf is 4.8 wide by 9.6 long, touchlines down its sides.
+    map.repeat.set(width / 4.8, depth / 9.6);
     this.floorTexture = map;
     const material = toon(0xffffff, { map });
     this.geometries.push(geometry);
@@ -127,7 +128,7 @@ export class TreadmillArea {
    * from, and a lip there would be a step into the bay.
    */
   private buildKerb(x: number, z: number, width: number, depth: number): void {
-    const material = toon(WORLD_COLORS.timber);
+    const material = toon(WORLD_COLORS.concrete);
 
     const sideGeometry = new BoxGeometry(KERB_THICKNESS, KERB_HEIGHT, depth);
     const backGeometry = new BoxGeometry(width, KERB_HEIGHT, KERB_THICKNESS);
@@ -151,17 +152,17 @@ export class TreadmillArea {
   /**
    * A post between neighbouring machines, so the row reads as bays.
    *
-   * The FRONT posts are vermilion pillars carrying one long lintel across the
-   * row - a torii colonnade the player walks under into training - with a
-   * paper lantern hung in each bay. The back posts stay short timber. Same
+   * The FRONT posts are white goalposts carrying one long crossbar across
+   * the row - a colonnade the player walks under into training - with a
+   * stadium lamp hung in each bay. The back posts stay short concrete. Same
    * footprint as the old dividers; like them, purely visual.
    */
   private buildDividers(frontZ: number, backZ: number): void {
     const back = new BoxGeometry(0.45, 2.1, 0.45);
-    const pillar = new CylinderGeometry(0.26, 0.32, COLONNADE_TOP, 10);
+    const pillar = new CylinderGeometry(0.26, 0.26, COLONNADE_TOP, 10);
     const cap = new CylinderGeometry(0.4, 0.4, 0.4, 10);
     this.geometries.push(back, pillar, cap);
-    const timber = toon(WORLD_COLORS.timber);
+    const concrete = toon(WORLD_COLORS.concrete);
 
     // A post at each end of the row and between every pair of neighbouring
     // decks - so a pair shares a bay divider, and the wider gap between tiers
@@ -175,45 +176,47 @@ export class TreadmillArea {
 
     const front = frontZ - 0.6;
     for (const x of xs) {
-      const post = new Mesh(back, timber);
+      const post = new Mesh(back, concrete);
       post.position.set(x, SPAWN_PLATFORM.topY + 1.05, backZ + 0.6);
       post.castShadow = true;
       this.root.add(post);
 
-      const column = new Mesh(pillar, MAT.red());
+      const column = new Mesh(pillar, MAT.white());
       column.position.set(x, SPAWN_PLATFORM.topY + COLONNADE_TOP / 2, front);
       column.castShadow = true;
       this.root.add(column);
-      const foot = new Mesh(cap, MAT.ink());
+      const foot = new Mesh(cap, MAT.navy());
       foot.position.set(x, SPAWN_PLATFORM.topY + 0.2, front);
       this.root.add(foot);
     }
 
-    // One lintel over the whole row: red tie beam, black cap with lifted ends.
+    // One crossbar over the whole row, with a navy rail under it to hang
+    // the lamps from.
     const first = xs[0] ?? 0;
     const last = xs[xs.length - 1] ?? 0;
     const span = last - first;
     const mid = (first + last) / 2;
-    const beam = new BoxGeometry(span + 1.2, 0.4, 0.4);
-    const lintel = bentBox(span + 3, 0.5, 0.8, 0.5);
-    this.geometries.push(beam, lintel);
-    const tie = new Mesh(beam, MAT.red());
+    const rail = new BoxGeometry(span + 1.2, 0.3, 0.3);
+    const crossbar = new CylinderGeometry(0.3, 0.3, span + 1.6, 10);
+    crossbar.rotateZ(Math.PI / 2);
+    this.geometries.push(rail, crossbar);
+    const tie = new Mesh(rail, MAT.navy());
     tie.position.set(mid, SPAWN_PLATFORM.topY + COLONNADE_TOP - 0.9, front);
     this.root.add(tie);
-    const top = new Mesh(lintel, MAT.ink());
+    const top = new Mesh(crossbar, MAT.white());
     top.position.set(mid, SPAWN_PLATFORM.topY + COLONNADE_TOP + 0.1, front);
     top.castShadow = true;
     this.root.add(top);
 
-    // A paper lantern in every bay, hung from the tie beam.
-    const lantern = paperLantern();
+    // A stadium lamp in every bay, hung from the rail.
+    const lamp = hangingLamp();
     for (let i = 0; i < xs.length - 1; i += 1) {
       const x = ((xs[i] as number) + (xs[i + 1] as number)) / 2;
-      for (const part of lantern.parts) {
+      for (const part of lamp.parts) {
         const mesh = new Mesh(part.geometry, part.material);
-        // Hung high enough that every lantern clears the machine labels.
+        // Hung high enough that every lamp clears the machine labels.
         mesh.position.set(x, SPAWN_PLATFORM.topY + COLONNADE_TOP - 0.9, front);
-        mesh.scale.setScalar(0.62);
+        mesh.scale.setScalar(0.8);
         this.root.add(mesh);
       }
     }
@@ -249,8 +252,8 @@ export class TreadmillArea {
     this.materials.push(glow.material);
     this.glowTexture = glow.texture;
 
-    // 修行 - training - in the seal; the English stays the readable part.
-    const texture = new CanvasTexture(drawSign('Train Speed', { kanji: '修行' }));
+    // A football in the seal; the words stay the readable part.
+    const texture = new CanvasTexture(drawSign('Train Speed', { seal: 'ball' }));
     texture.colorSpace = SRGBColorSpace;
     this.texture = texture;
 

@@ -9,18 +9,18 @@ import {
   type BufferGeometry,
 } from 'three';
 import { WORLD_COLORS } from '../config/worldVisuals.js';
-import { merge } from './JapaneseProps.js';
+import { merge } from './WorldProps.js';
 import { seededRandom, type Prop } from './PropBatch.js';
 import { toon } from './ToonKit.js';
 
 /**
- * Procedural trees: sakura in several builds, autumn maples, black pines and
- * bamboo stands.
+ * Procedural trees: broadleaf parkland trees in several builds and tones, and
+ * pines.
  *
  * Every tree is grown from a seed, so the SAME seed gives the same tree on
  * every client, and different seeds give genuinely different silhouettes -
  * not one model stamped across the map. Branch structure is real geometry;
- * the blossom is a cluster of soft blobs lit through the cel ramp, and it
+ * the canopy is a cluster of soft blobs lit through the cel ramp, and it
  * sways in the shared wind.
  */
 
@@ -41,8 +41,8 @@ const limb = (a: Vector3, b: Vector3, r0: number, r1: number): [BufferGeometry, 
 
 /**
  * A canopy blob with a brightness baked into vertex colours: lit on top,
- * shaded underneath. Neutral grey, so the SAME canopy reads as sakura, maple
- * or pine depending only on the material it is drawn with.
+ * shaded underneath. Neutral grey, so the SAME canopy reads as summer green,
+ * deep green or autumn depending only on the material it is drawn with.
  */
 const blob = (
   centre: Vector3,
@@ -65,14 +65,14 @@ const blob = (
   return [geometry, matrix];
 };
 
-export type CanopyTone = 'sakura' | 'sakuraDeep' | 'maple' | 'pine' | 'white';
+export type CanopyTone = 'leaf' | 'leafDeep' | 'leafLight' | 'autumn' | 'pine';
 
 const CANOPY_COLORS: Record<CanopyTone, number> = {
-  sakura: WORLD_COLORS.sakura,
-  sakuraDeep: WORLD_COLORS.sakuraDeep,
-  maple: WORLD_COLORS.maple,
+  leaf: WORLD_COLORS.leaf,
+  leafDeep: WORLD_COLORS.leafDeep,
+  leafLight: WORLD_COLORS.leafLight,
+  autumn: WORLD_COLORS.autumn,
   pine: WORLD_COLORS.pine,
-  white: 0xfff0f4,
 };
 
 export interface TreeShape {
@@ -108,7 +108,7 @@ const grow = (build: TreeBuild, seed: number): { bark: BufferGeometry; canopy: B
   const bark: [BufferGeometry, Matrix4][] = [];
   const canopy: [BufferGeometry, Matrix4][] = [];
 
-  // A trunk that kinks once or twice - sakura are never straight.
+  // A trunk that kinks once or twice - old parkland trees are never straight.
   const base = new Vector3(0, -0.3, 0);
   const mid = new Vector3((random() - 0.5) * 0.9, shape.trunk * 0.55, (random() - 0.5) * 0.9);
   const top = new Vector3(mid.x + (random() - 0.5) * 0.8, shape.trunk, mid.z + (random() - 0.5) * 0.8);
@@ -157,7 +157,7 @@ const props = new Map<string, Prop>();
 
 /**
  * A broadleaf tree prop. The canopy sways from the top of the trunk up;
- * `tone` picks sakura pink, deep pink, autumn maple or white blossom.
+ * `tone` picks its green, or autumn.
  */
 export const broadleaf = (build: TreeBuild, seed: number, tone: CanopyTone): Prop => {
   const key = `${build}:${seed}:${tone}`;
@@ -183,8 +183,8 @@ export const broadleaf = (build: TreeBuild, seed: number, tone: CanopyTone): Pro
   return prop;
 };
 
-/** A Japanese black pine: a leaning trunk carrying flat cloud-pad layers. */
-export const blackPine = (seed: number): Prop => {
+/** A pine: a leaning trunk carrying flat layers of needles. */
+export const pineTree = (seed: number): Prop => {
   const key = `pine:${seed}`;
   const existing = props.get(key);
   if (existing) return existing;
@@ -229,52 +229,6 @@ export const blackPine = (seed: number): Prop => {
       },
     ],
     castShadow: true,
-  };
-  props.set(key, prop);
-  return prop;
-};
-
-/** A stand of bamboo: tall jointed culms with leaf tufts, swaying hard. */
-export const bambooStand = (seed: number): Prop => {
-  const key = `bamboo:${seed}`;
-  const existing = props.get(key);
-  if (existing) return existing;
-  const random = seededRandom(seed);
-  const culms: [BufferGeometry, Matrix4][] = [];
-  const nodes: [BufferGeometry, Matrix4][] = [];
-  const leaves: [BufferGeometry, Matrix4][] = [];
-  const count = 7 + Math.floor(random() * 5);
-  for (let i = 0; i < count; i += 1) {
-    const x = (random() - 0.5) * 3.2;
-    const z = (random() - 0.5) * 3.2;
-    const height = 9 + random() * 7;
-    const radius = 0.12 + random() * 0.06;
-    const culm = new CylinderGeometry(radius * 0.8, radius, height, 5, 1, true);
-    culms.push([culm, new Matrix4().makeTranslation(x, height / 2, z)]);
-    for (let y = 1.6; y < height; y += 1.6 + random() * 0.4) {
-      nodes.push([new CylinderGeometry(radius * 1.2, radius * 1.2, 0.1, 5), new Matrix4().makeTranslation(x, y, z)]);
-    }
-    for (let l = 0; l < 3; l += 1) {
-      leaves.push(
-        blob(
-          new Vector3(x + (random() - 0.5) * 1.6, height - l * 1.4 - random(), z + (random() - 0.5) * 1.6),
-          0.9 + random() * 0.5,
-          0.35,
-          0.9 + random() * 0.1,
-          0,
-        ),
-      );
-    }
-  }
-  const culmMaterial = toon(WORLD_COLORS.bamboo, { sway: 0.02, swayBase: 0 });
-  const prop: Prop = {
-    parts: [
-      { geometry: merge([...culms, ...nodes]), material: culmMaterial },
-      {
-        geometry: merge(leaves),
-        material: toon(0x5aa83a, { vertexColors: true, sway: 0.02, swayBase: 0 }),
-      },
-    ],
   };
   props.set(key, prop);
   return prop;

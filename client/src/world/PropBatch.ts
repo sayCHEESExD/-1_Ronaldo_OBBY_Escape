@@ -48,7 +48,7 @@ interface Bucket {
  * Collects prop placements and turns them into instanced draws.
  *
  * Every (geometry, material) pair becomes ONE InstancedMesh per chunk of the
- * route, so a thousand lanterns cost a few draws. Chunking along Z is what
+ * route, so a thousand lamp posts cost a few draws. Chunking along Z is what
  * lets the camera frustum drop the far scenery: a single InstancedMesh
  * spanning a 70 km route has a bounding sphere nothing can ever be outside of.
  */
